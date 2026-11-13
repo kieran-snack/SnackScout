@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}{{ number }} {{ r.team.name }} · SnackScout{% endblock %}
+{% macro yn(v) %}{% if v %}<span class="yes">✓</span>{% else %}<span class="no">✗</span>{% endif %}{% endmacro %}
+{% macro counter(name, val) %}
+  <span class="counter"><button type="button" class="ghost small" onclick="bump(this,-1)">−</button>
+  <input name="{{ name }}" inputmode="numeric" value="{{ val if val is not none else '' }}">
+  <button type="button" class="ghost small" onclick="bump(this,1)">+</button></span>
+{% endmacro %}
+{% block body %}
+{% set t = r.team %}{% set s = r.season %}{% set q = r.quick %}{% set tn = r.team_note %}
+<div class="ev-head">
+  <div>
+    <h1>{{ t.number }} · {{ t.name }}</h1>
+    <div class="muted">
+      {{ t.location.city }}, {{ t.location.state }}, {{ t.location.country }} · Rookie year {{ t.rookieYear }}
+      {% if t.schoolName %} · {{ t.schoolName }}{% endif %}
+      {% if r.info and r.info.robotName %} · Robot: <b>{{ r.info.robotName }}</b>{% endif %}
+    </div>
+    <div class="small" style="margin-top:4px">
+      <a href="https://ftcscout.org/teams/{{ number }}" target="_blank">FTCScout</a> ·
+      <a href="https://ftc-events.firstinspires.org/{{ season }}/team/{{ number }}" target="_blank">FTC Events</a>
+      {% if t.website %} · <a href="{{ t.website }}" target="_blank">Website</a>{% endif %}
+    </div>
+  </div>
+  <div><a class="btn ghost" href="?refresh=1">↻ Refresh data</a>
+       <a class="btn ghost" href="{{ url_for('compare', teams=number) }}">Compare…</a></div>
+</div>
+
+<h2>At a glance (season)</h2>
+{% if s %}
+<div class="cards">
+  <div class="card"><div class="k">OPR (no penalties)</div><div class="v">{{ q.tot.value|num if q else '–' }}</div>
+    <div class="s">{% if q %}#{{ q.tot.rank }} of {{ q.count }} worldwide{% endif %}</div></div>
+  <div class="card"><div class="k">Auto OPR</div><div class="v">{{ q.auto.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.auto.rank }}{% endif %}</div></div>
+  <div class="card"><div class="k">Teleop OPR</div><div class="v">{{ q.dc.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.dc.rank }}{% endif %}</div></div>
+  <div class="card"><div class="k">Record</div><div class="v">{{ s.wins }}-{{ s.losses }}-{{ s.ties }}</div><div class="s">{{ s.n }} matches</div></div>
+  <div class="card"><div class="k">Hive tips / match</div><div class="v">{{ s.avg_tips|num }}</div><div class="s">max {{ s.max_tips }} · auto tip {{ s.auto_tip_rate|pct }}</div></div>
+  <div class="card"><div class="k">Pollen+Nectar in hive</div><div class="v">{{ s.avg_hive_elements|num }}</div><div class="s">alliance avg · max {{ s.max_hive_elements }}</div></div>
+  <div class="card"><div class="k">Auto leave (robot)</div><div class="v">{{ s.leave_rate|pct }}</div><div class="s">auto park {{ s.auto_park_rate|pct }}</div></div>
+  <div class="card"><div class="k">Endgame park (robot)</div><div class="v">{{ s.park_rate|pct }}</div><div class="s">avg {{ s.avg_park_pts|num }} pts</div></div>
+  <div class="card"><div class="k">Penalties given / match</div><div class="v">{{ s.avg_penalties|num }}</div><div class="s">{{ s.majors }} majors total</div></div>
+  <div class="card"><div class="k">Swarm RP</div><div class="v">{{ s.swarm_rate|pct }}</div><div class="s">Pollinator {{ s.pollinator1_rate|pct }} / {{ s.pollinator2_rate|pct }}</div></div>
+  <div class="card"><div class="k">Flower / Nectar</div><div class="v">{{ s.avg_flower_pts|num }}</div><div class="s">flower pts · nectar used {{ s.nectar_rate|pct }}</div></div>
+  <div class="card"><div class="k">Avg alliance score</div><div class="v">{{ s.avg_score|num }}</div><div class="s">auto {{ s.avg_auto|num }} · teleop {{ s.avg_teleop|num }}</div></div>
+</div>
+<p class="banner">“Hive tips”, “Pollen+Nectar” and RPs are <b>alliance totals</b> from the official data, so they include the partner robot too.
+  OPR estimates this robot's own share. Leave and park are tracked for <b>this robot</b>. For exact per-robot pollen counts, scout the clips below.</p>
+{% else %}
+<p class="muted">No played matches with scores yet this season.</p>
+{% endif %}
+
+{% if r.scouted %}{% set sc = r.scouted %}
+<h2>Our scouting ({{ sc.n }} matches scouted)</h2>
+<div class="cards">
+  <div class="card"><div class="k">Auto pollen</div><div class="v">{{ sc.avg_auto_pollen|num }}</div></div>
+  <div class="card"><div class="k">Teleop pollen</div><div class="v">{{ sc.avg_teleop_pollen|num }}</div><div class="s">best match {{ sc.max_pollen }}</div></div>
+  <div class="card"><div class="k">Nectar</div><div class="v">{{ sc.avg_nectar|num }}</div></div>
+  <div class="card"><div class="k">Accuracy</div><div class="v">{{ sc.accuracy|pct }}</div></div>
+  <div class="card"><div class="k">Hive tips caused</div><div class="v">{{ sc.avg_tips|num }}</div></div>
+  <div class="card"><div class="k">Broke down</div><div class="v">{{ sc.breakdowns }}</div><div class="s">played defense {{ sc.defense }}×</div></div>
+  <div class="card"><div class="k">Driver rating</div><div class="v">{{ sc.avg_rating|num }}</div><div class="s">out of 5</div></div>
+</div>
+{% endif %}
+
+<h2 id="pit">Pit scouting / robot notes</h2>
+<form class="panel" method="post" action="{{ url_for('team_notes', number=number) }}">
+  <div class="pit-grid">
+    <label>Drivetrain<input name="drivetrain" value="{{ tn.drivetrain or '' }}" placeholder="mecanum, tank, swerve…"></label>
+    <label>Shooter / scoring mech<input name="shooter" value="{{ tn.shooter or '' }}" placeholder="flywheel, turret, intake type…"></label>
+    <label>Elements they score
+      <select name="elements">{% for o in ['', 'Pollen only', 'Pollen + Nectar', 'Nectar only', 'Neither'] %}
+        <option {% if tn.elements == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
+    <label>Auto routine<textarea name="auto_desc">{{ tn.auto_desc or '' }}</textarea></label>
+    <label>Strengths<textarea name="strengths">{{ tn.strengths or '' }}</textarea></label>
+    <label>Weaknesses<textarea name="weaknesses">{{ tn.weaknesses or '' }}</textarea></label>
+    <label>Other notes<textarea name="notes">{{ tn.notes or '' }}</textarea></label>
+  </div>
+  <p><button>Save robot notes</button></p>
+</form>
+
+{% for ev in r.events %}{% set e = ev.event %}{% set st = ev.stats %}
+<h2>{{ e.name }}</h2>
+<div class="ev-head muted small">
+  <span>{{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · {{ e.location.city }}, {{ e.location.state }} · {{ e.code }}</span>
+  {% if st %}<span>Rank <b>#{{ st.rank }}</b> · {{ st.wins }}-{{ st.losses }}-{{ st.ties }} · RP {{ st.rp|num(2) }}</span>{% endif %}
+</div>
+{% if not ev.matches %}
+  <p class="muted">{% if e.finished %}No match data.{% else %}Upcoming / not played yet.{% endif %}</p>
+{% else %}
+{% if st %}
+<div class="table-wrap" style="margin:8px 0"><table>
+  <tr><th class="l"></th><th>Total (np)</th><th>Auto</th><th>Teleop</th><th>Auto hive</th><th>Teleop hive</th><th>Flower</th><th>Garden</th>
+      <th>Leave</th><th>Auto park</th><th>Park</th><th>Tips</th><th>Penalties</th></tr>
+  {% for lbl, g in [('OPR', st.opr), ('Average', st.avg), ('Best', st.max)] %}
+  <tr><td class="l"><b>{{ lbl }}</b></td><td><b>{{ g.totalPointsNp|num }}</b></td><td>{{ g.autoPoints|num }}</td><td>{{ g.dcPoints|num }}</td>
+      <td>{{ g.autoHivePoints|num }}</td><td>{{ g.dcHivePoints|num }}</td><td>{{ g.dcFlowerPoints|num }}</td><td>{{ g.dcGardenPoints|num }}</td>
+      <td>{{ g.autoLeavePointsIndividual|num }}</td><td>{{ g.autoParkPointsIndividual|num }}</td><td>{{ g.dcParkPointsIndividual|num }}</td>
+      <td>{{ g.tips|num }}</td><td>{{ g.penaltyPointsCommitted|num }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+<div class="table-wrap"><table>
+  <tr><th class="l">Match</th><th>With</th><th>Against</th><th>Result</th><th>Auto</th><th>Teleop</th>
+      <th title="auto tips / total tips">Tips</th><th title="pollen+nectar in hive">Hive P+N</th><th>Garden</th><th title="flower points (pollen/nectar in flowers)">Flower</th>
+      <th title="this robot">Leave</th><th title="this robot">A.Park</th><th title="this robot">Park</th><th>Pen.</th><th>RP</th><th>Video</th><th></th></tr>
+  {% for m in ev.matches %}{% set key = m.event ~ ':' ~ m.id %}
+  <tr class="{{ m.alliance }}" data-key="{{ key }}">
+    <td class="l al"><b>{{ m.label }}</b>{% if m.surrogate %} <span class="chip">surrogate</span>{% endif %}{% if m.no_show %} <span class="chip">no-show</span>{% endif %}{% if m.note %} <span class="chip on" title="scouted">📝</span>{% endif %}</td>
+    <td>{% for p in m.partners %}<a href="{{ url_for('team', number=p) }}">{{ p }}</a>{% endfor %}</td>
+    <td class="small">{% for p in m.opponents %}<a href="{{ url_for('team', number=p) }}">{{ p }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+    {% if m.has_scores %}
+    <td><span class="{{ m.result }}">{{ m.result }}</span> {{ m.score }}–{{ m.opp_score }}</td>
+    <td>{{ m.auto }}</td><td>{{ m.teleop }}</td>
+    <td>{{ m.auto_tips }}/{{ m.tips }}</td><td>{{ m.hive_elements }}</td><td>{{ m.garden }}</td>
+    <td>{{ m.flower_pts }}{% if m.flower_pollen or m.flower_nectar %} <span class="small muted">({{ m.flower_pollen }}P/{{ m.flower_nectar }}N)</span>{% endif %}</td>
+    <td>{{ yn(m.robot_leave) }}</td><td>{{ m.robot_auto_park }}</td><td>{{ m.robot_park }}</td>
+    <td>{% if m.penalties %}<span class="L">{{ m.penalties }}</span>{% else %}0{% endif %}</td>
+    <td class="small">{% if m.swarm_rp %}<span class="chip on">S</span>{% endif %}{% if m.pollinator1_rp %}<span class="chip on">P1</span>{% endif %}{% if m.pollinator2_rp %}<span class="chip on">P2</span>{% endif %}</td>
+    {% else %}
+    <td colspan="12" class="muted">{% if m.played %}no score breakdown{% else %}not played yet{% endif %}</td>
+    {% endif %}
+    <td class="vid"><span class="spin"></span></td>
+    <td><button class="small" onclick="toggleScout('{{ key }}')">Scout</button></td>
+  </tr>
+  <tr class="note-row" id="nr-{{ key }}" hidden><td colspan="17">
+    <div class="scout-grid">
+      <div class="player-box"></div>
+      <form class="note-form" onsubmit="return saveNote(event, '{{ key }}')"
+            data-event="{{ m.event }}" data-id="{{ m.id }}" data-label="{{ m.label }}">
+        {% set n = m.note or {} %}
+        <div class="form-grid">
+          <label>Auto pollen scored{{ counter('auto_pollen', n.auto_pollen) }}</label>
+          <label>Teleop pollen scored{{ counter('teleop_pollen', n.teleop_pollen) }}</label>
+          <label>Missed shots{{ counter('missed', n.missed) }}</label>
+          <label>Nectar scored{{ counter('nectar', n.nectar) }}</label>
+          <label>Hive tips caused{{ counter('hive_tips', n.hive_tips) }}</label>
+          <label>Mostly scored in
+            <select name="scored_where">{% for o in ['', 'Hive', 'Flower', 'Garden', 'Mixed', "Didn't score"] %}<option {% if n.scored_where == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
+          <label>Endgame
+            <select name="park">{% for o in ['', 'None', 'Partial park', 'Full park'] %}<option {% if n.park == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
+          <label>Driver rating (1-5)
+            <select name="rating">{% for o in ['', 1, 2, 3, 4, 5] %}<option {% if n.rating == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
+          <label class="check"><input type="checkbox" name="defense" {% if n.defense %}checked{% endif %}> Played defense</label>
+          <label class="check"><input type="checkbox" name="broke_down" {% if n.broke_down %}checked{% endif %}> Broke down / stuck</label>
+        </div>
+        <label class="small muted" style="display:block;margin-top:8px">Notes
+          <textarea name="notes" style="width:100%;min-height:50px">{{ n.notes or '' }}</textarea></label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <input name="scouter" placeholder="Scouter name" value="{{ n.scouter or '' }}" style="width:150px">
+          <button>Save</button><span class="saved small muted"></span>
+        </div>
+      </form>
+    </div>
+  </td></tr>
+  {% endfor %}
+</table></div>
+<details class="small" style="margin-top:6px" data-event-videos="{{ e.code }}">
+  <summary>Livestreams used for this event</summary>
+  <div class="panel">
+    <ul class="vid-list"><li class="muted">Searching…</li></ul>
+    <form onsubmit="return addEventVideo(event, '{{ e.code }}')" style="display:flex;gap:6px;flex-wrap:wrap">
+      <input name="url" placeholder="Paste a YouTube livestream link for {{ e.name }}" style="flex:1;min-width:240px">
+      <button class="small">Add stream</button>
+    </form>
+    <p class="muted">If a match opens at the wrong moment, change <b>sync</b> (seconds). Use a positive number if the video is too early, negative if it's too late.</p>
+  </div>
+</details>
+{% endif %}
+{% endfor %}
+
+{% if r.upcoming %}
+<h2>Upcoming events</h2>
+<ul>{% for u in r.upcoming %}<li><b>{{ u.name }}</b> <span class="muted">· {{ u.start }} · {{ u.city }} · {{ u.code }}</span></li>{% endfor %}</ul>
+{% endif %}
+
+<h2>Other team videos on YouTube</h2>
+<div class="panel"><ul class="vid-list" id="team-videos"><li class="muted"><span class="spin"></span> Searching YouTube…</li></ul></div>
+
+<script>
+const TEAM = {{ number }};
+let VIDEO = {matches: {}, events: {}};
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtT(s) { s = Math.round(s); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+  return (h ? h + ':' + String(m).padStart(2,'0') : m) + ':' + String(x).padStart(2,'0'); }
+async function post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+
+async function loadVideos(refresh) {
+  document.querySelectorAll('td.vid').forEach(td => td.innerHTML = '<span class="spin"></span>');
+  try {
+    VIDEO = await (await fetch(`/api/videos/${TEAM}` + (refresh ? '?refresh=1' : ''))).json();
+  } catch (e) { VIDEO = {matches: {}, events: {}, team_videos: []}; }
+  document.querySelectorAll('tr[data-key]').forEach(tr => renderVidCell(tr.dataset.key));
+  document.querySelectorAll('[data-event-videos]').forEach(d => {
+    const code = d.dataset.eventVideos, vids = VIDEO.events[code] || [];
+    d.querySelector('ul').innerHTML = vids.length ? vids.map(v => `<li>
+      <a href="https://www.youtube.com/watch?v=${v.video_id}" target="_blank">${esc(v.title)}</a>
+      <span class="chip">${esc(v.source)}</span>
+      sync <input type="number" step="1" value="${v.sync_offset || 0}" style="width:80px"
+        onchange="setSync('${code}','${v.video_id}',this.value)">s
+      <button class="ghost small" onclick="hideVideo('${code}','${v.video_id}')">Not this event</button></li>`).join('')
+      : '<li class="muted">No livestream found automatically. Paste one below.</li>';
+    if (!vids.length) d.open = true;
+  });
+  const tv = VIDEO.team_videos || [];
+  document.getElementById('team-videos').innerHTML = tv.length ? tv.map(v =>
+    `<li>${v.this_season ? '<span class="chip on">BIOBUZZ</span> ' : ''}<a href="${v.url}" target="_blank">${esc(v.title)}</a>
+     <span class="muted small">· ${esc(v.channel)}${v.duration ? ' · ' + fmtT(v.duration) : ''}</span></li>`).join('')
+    : '<li class="muted">Nothing found.</li>';
+}
+
+function renderVidCell(key) {
+  const td = document.querySelector(`tr[data-key="${key}"] td.vid`), v = VIDEO.matches[key];
+  if (!v) { td.innerHTML = '<span class="muted small">–</span>'; return; }
+  let clip = '';
+  if (v.clip && v.clip.state === 'done') clip = `<a class="btn ghost small" href="${v.clip.url}" target="_blank" title="downloaded clip">💾</a>`;
+  else if (v.clip && (v.clip.state === 'queued' || v.clip.state === 'downloading')) clip = '<span class="spin" title="downloading clip"></span>';
+  else clip = `<button class="ghost small" title="Download this match as a clip (works offline)" onclick="makeClip('${key}')">⬇</button>`;
+  if (v.clip && v.clip.state === 'error') clip += ` <span class="L small" title="${esc(v.clip.error)}">failed</span>`;
+  td.innerHTML = `<a class="btn small" href="${v.url}" target="_blank" title="${esc(v.title)} @ ${fmtT(v.offset)} (${v.method})">▶</a> ${clip}`;
+}
+
+async function makeClip(key) {
+  const v = VIDEO.matches[key], tr = document.querySelector(`tr[data-key="${key}"]`);
+  const f = document.getElementById('nr-' + key).querySelector('form');
+  v.clip = await post('/api/clip', {event: f.dataset.event, label: f.dataset.label, video_id: v.video_id, offset: v.offset});
+  v.clip_name = v.clip.name || v.clip_name;
+  renderVidCell(key); pollClip(key);
+}
+async function pollClip(key) {
+  const v = VIDEO.matches[key];
+  const st = (await (await fetch('/api/clip-status?name=' + encodeURIComponent(v.clip_name))).json())[v.clip_name];
+  v.clip = st; renderVidCell(key);
+  if (st.state === 'queued' || st.state === 'downloading') setTimeout(() => pollClip(key), 4000);
+  else if (st.state === 'done' && !document.getElementById('nr-' + key).hidden) showPlayer(key);
+}
+
+function showPlayer(key) {
+  const box = document.getElementById('nr-' + key).querySelector('.player-box'), v = VIDEO.matches[key];
+  if (!v) { box.innerHTML = '<p class="muted">No video found for this match. Open “Livestreams used for this event” below the table and paste the event\'s YouTube stream.</p>'; return; }
+  if (v.clip && v.clip.state === 'done') box.innerHTML = `<video class="player" src="${v.clip.url}" controls></video>`;
+  else box.innerHTML = `<iframe class="player" allowfullscreen allow="autoplay; encrypted-media"
+      src="https://www.youtube-nocookie.com/embed/${v.video_id}?start=${v.start}"></iframe>
+      <div class="small muted">${esc(v.title)} · ${fmtT(v.start)} · <a href="${v.url}" target="_blank">open on YouTube</a></div>`;
+}
+
+function toggleScout(key) {
+  const row = document.getElementById('nr-' + key);
+  row.hidden = !row.hidden;
+  if (!row.hidden) {
+    showPlayer(key);
+    const s = row.querySelector('[name=scouter]');
+    if (!s.value) try { s.value = localStorage.getItem('scouter') || ''; } catch (e) {}
+  } else row.querySelector('.player-box').innerHTML = '';
+}
+
+function bump(btn, d) {
+  const inp = btn.parentElement.querySelector('input');
+  inp.value = Math.max(0, (parseInt(inp.value) || 0) + d);
+}
+
+async function saveNote(ev, key) {
+  ev.preventDefault();
+  const f = ev.target, data = Object.fromEntries(new FormData(f));
+  data.defense = f.defense.checked; data.broke_down = f.broke_down.checked;
+  Object.assign(data, {team: TEAM, event: f.dataset.event, match_id: f.dataset.id, label: f.dataset.label});
+  try { localStorage.setItem('scouter', data.scouter || ''); } catch (e) {}
+  const r = await post('/api/match-note', data);
+  f.querySelector('.saved').textContent = r.ok ? 'Saved ✓' : 'Error saving';
+  return false;
+}
+
+async function addEventVideo(ev, code) {
+  ev.preventDefault();
+  const r = await post('/api/event-video', {event: code, url: ev.target.url.value});
+  if (!r.ok) alert(r.error); else { ev.target.url.value = ''; loadVideos(); }
+  return false;
+}
+async function setSync(code, vid, off) { await post('/api/event-video/sync', {event: code, video_id: vid, offset: off}); loadVideos(); }
+async function hideVideo(code, vid) { await post('/api/event-video/hide', {event: code, video_id: vid}); loadVideos(); }
+
+loadVideos({{ 'true' if request.args.get('refresh') else 'false' }});
+</script>
+{% endblock %}

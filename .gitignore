@@ -1,0 +1,7 @@
+.env
+.venv/
+cache/
+clips/
+__pycache__/
+*.pyc
+snackscout.db

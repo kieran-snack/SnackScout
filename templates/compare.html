@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Compare · SnackScout{% endblock %}
+{% block body %}
+<h2>Compare alliance partners</h2>
+<form action="{{ url_for('compare') }}" style="display:flex;gap:6px;max-width:520px">
+  <input name="teams" value="{{ teams }}" placeholder="e.g. 16750, 3231, 23269" style="flex:1">
+  <button>Compare</button>
+</form>
+{% set ok = reports|selectattr(1)|list %}
+{% if ok %}
+{# each row: label, function name, higher_is_better #}
+{% set rows = [
+  ('OPR (no penalties)', 'opr', True), ('Auto OPR', 'auto_opr', True), ('Teleop OPR', 'dc_opr', True),
+  ('World OPR rank', 'rank', False), ('Record', 'record', None),
+  ('Hive tips / match (alliance)', 'avg_tips', True), ('Auto tip rate', 'auto_tip_rate', True),
+  ('Hive pollen+nectar (alliance)', 'avg_hive_elements', True), ('Nectar used (alliance)', 'nectar_rate', True),
+  ('Auto leave (robot)', 'leave_rate', True), ('Auto park (robot)', 'auto_park_rate', True), ('Endgame park (robot)', 'park_rate', True),
+  ('Penalties / match', 'avg_penalties', False), ('Swarm RP', 'swarm_rate', True), ('Pollinator 1 RP', 'pollinator1_rate', True),
+  ('Scouted pollen / match', 'sc_pollen', True), ('Scouted accuracy', 'sc_acc', True), ('Scouted nectar', 'sc_nectar', True),
+  ('Breakdowns seen', 'sc_break', False), ('Elements (pit)', 'elements', None), ('Drivetrain (pit)', 'drivetrain', None),
+] %}
+{% macro val(r, f) -%}
+  {%- set s = r.season or {} -%}{%- set q = r.quick -%}{%- set sc = r.scouted or {} -%}
+  {%- if f == 'opr' -%}{{ q.tot.value|round(1) if q else '' }}
+  {%- elif f == 'auto_opr' -%}{{ q.auto.value|round(1) if q else '' }}
+  {%- elif f == 'dc_opr' -%}{{ q.dc.value|round(1) if q else '' }}
+  {%- elif f == 'rank' -%}{{ q.tot.rank if q else '' }}
+  {%- elif f == 'record' -%}{{ '%s-%s-%s'|format(s.wins, s.losses, s.ties) if s else '' }}
+  {%- elif f == 'sc_pollen' -%}{{ ((sc.avg_auto_pollen or 0) + (sc.avg_teleop_pollen or 0))|round(1) if sc else '' }}
+  {%- elif f == 'sc_acc' -%}{{ sc.accuracy if sc and sc.accuracy is not none else '' }}
+  {%- elif f == 'sc_nectar' -%}{{ sc.avg_nectar if sc and sc.avg_nectar is not none else '' }}
+  {%- elif f == 'sc_break' -%}{{ sc.breakdowns if sc else '' }}
+  {%- elif f in ('elements', 'drivetrain') -%}{{ r.team_note[f] or '' }}
+  {%- else -%}{{ s[f] if s and s[f] is not none else '' }}
+  {%- endif -%}
+{%- endmacro %}
+<div class="table-wrap compare" style="margin-top:12px"><table>
+  <tr><th class="l"></th>{% for n, r in reports %}<th>{% if r %}<a href="{{ url_for('team', number=n) }}">{{ n }}</a><br><span class="small">{{ r.team.name }}</span>{% else %}{{ n }}<br><span class="small">not found</span>{% endif %}</th>{% endfor %}</tr>
+  {% for label, f, hib in rows %}
+  {% set vals = [] %}{% for n, r in reports %}{% set _ = vals.append(val(r, f)|trim if r else '') %}{% endfor %}
+  {% set nums = vals|reject('equalto', '')|map('float')|list %}
+  {% set best = (nums|max if hib else nums|min) if (hib is not none and nums|length > 1 and nums|max != nums|min) else none %}
+  <tr><td class="l">{{ label }}</td>
+    {% for v in vals %}<td class="{{ 'best' if best is not none and v != '' and v|float == best }}">{{ v if v != '' else '–' }}{% if v != '' and f.endswith('rate') or (v != '' and f == 'sc_acc') %}%{% endif %}</td>{% endfor %}</tr>
+  {% endfor %}
+</table></div>
+<p class="small muted">Green = best in the row. Alliance stats include each team's partners, so lean on OPR and the per-robot rows.</p>
+{% endif %}
+{% endblock %}
