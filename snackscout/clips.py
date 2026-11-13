@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import yt_dlp
 from yt_dlp.utils import download_range_func
 
-from .config import CLIP_AFTER, CLIP_BEFORE, CLIP_MAX_HEIGHT, CLIPS_DIR
+from .config import CLIP_AFTER, CLIP_BEFORE, CLIP_MAX_HEIGHT, CLIPS_DIR, YTDLP_EXTRA
 from .video import _QuietLogger
 
 _pool = ThreadPoolExecutor(max_workers=2)
@@ -31,7 +31,7 @@ def _download(name: str, video_id: str, start: int, end: int):
         _jobs[name] = {"state": "downloading"}
     h = CLIP_MAX_HEIGHT
     opts = dict(
-        quiet=True, no_warnings=True, noprogress=True, logger=_QuietLogger(),
+        quiet=True, no_warnings=True, noprogress=True, logger=_QuietLogger(), **YTDLP_EXTRA,
         format=f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/b[height<={h}]/bv*[height<={h}]+ba/b",
         download_ranges=download_range_func(None, [(start, end)]),
         force_keyframes_at_cuts=True, merge_output_format="mp4",

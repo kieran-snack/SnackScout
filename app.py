@@ -2,18 +2,69 @@
 
 Run:  .venv\\Scripts\\python app.py   then open http://localhost:5000
 """
+import hmac
 import re
-from datetime import date
+import time
+from datetime import date, timedelta
 
-from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import (Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory,
+                   session, url_for)
 
 from snackscout import analysis, autosync, clips, db, ftcscout, report, strategy, video
-from snackscout.config import ANALYSIS_DIR, CLIPS_DIR, OUR_TEAM, SEASON
+from snackscout.config import (ANALYSIS_DIR, CLIPS_DIR, HOST, OUR_TEAM, PORT, SEASON, TEAM_PASSWORD,
+                               secret_key)
 from snackscout.ftcscout import ApiError
 
 app = Flask(__name__)
-app.config["OUR_TEAM"] = OUR_TEAM
+app.config.update(OUR_TEAM=OUR_TEAM, SECRET_KEY=secret_key(), PERMANENT_SESSION_LIFETIME=timedelta(days=60),
+                  SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 db.init()
+
+CLIP_RE = re.compile(r"[A-Za-z0-9_-]+\.mp4")
+VIDEO_RE = re.compile(r"[A-Za-z0-9_-]{11}")
+EVENT_RE = re.compile(r"[A-Za-z0-9]{2,20}")
+
+
+def check(pattern, value):
+    """Reject anything that isn't a plain clip/video/event id (no paths)."""
+    if not isinstance(value, str) or not pattern.fullmatch(value):
+        abort(400)
+    return value
+
+
+# ---------------- team password ----------------
+
+@app.before_request
+def require_login():
+    if not TEAM_PASSWORD or session.get("ok"):
+        return None
+    if request.endpoint in ("login", "static"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify(error="Log in first."), 401
+    return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not TEAM_PASSWORD:
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        if hmac.compare_digest(request.form.get("password", "").encode(), TEAM_PASSWORD.encode()):
+            session.permanent = True
+            session["ok"] = True
+            nxt = request.args.get("next") or "/"
+            return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else "/")
+        time.sleep(1)  # slow down password guessing
+        error = "Wrong password."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 @app.template_filter("num")
@@ -151,33 +202,34 @@ def add_event_video():
     if not meta.get("start_ts") and not meta.get("chapters"):
         return jsonify(ok=False, error="That video isn't a recorded livestream and has no chapters, "
                                        "so SnackScout can't line up match times with it."), 400
-    db.add_event_video(d["event"], meta, "manual")
+    db.add_event_video(check(EVENT_RE, d["event"]), meta, "manual")
     return jsonify(ok=True)
 
 
 @app.post("/api/event-video/sync")
 def sync_event_video():
     d = request.get_json()
-    db.set_sync(d["event"], d["video_id"], float(d["offset"]))
+    db.set_sync(check(EVENT_RE, d["event"]), check(VIDEO_RE, d["video_id"]), float(d["offset"]))
     return jsonify(ok=True)
 
 
 @app.post("/api/event-video/hide")
 def hide_event_video():
     d = request.get_json()
-    db.hide_video(d["event"], d["video_id"])
+    db.hide_video(check(EVENT_RE, d["event"]), check(VIDEO_RE, d["video_id"]))
     return jsonify(ok=True)
 
 
 @app.post("/api/clip")
 def make_clip():
     d = request.get_json()
-    return jsonify(clips.request(d["event"], d["label"], d["video_id"], int(d["offset"])))
+    check(re.compile(r"[A-Za-z0-9 -]{1,20}"), d["label"])
+    return jsonify(clips.request(check(EVENT_RE, d["event"]), d["label"], check(VIDEO_RE, d["video_id"]), int(d["offset"])))
 
 
 @app.get("/api/clip-status")
 def clip_status():
-    return jsonify({n: clips.status(n) for n in request.args.getlist("name")})
+    return jsonify({n: clips.status(check(CLIP_RE, n)) for n in request.args.getlist("name")})
 
 
 @app.get("/clips/<path:name>")
@@ -194,7 +246,7 @@ def serve_analysis(name):
 
 @app.get("/api/frame")
 def frame():
-    img = analysis.grab_frame(request.args["clip"], float(request.args.get("t", 60)))
+    img = analysis.grab_frame(check(CLIP_RE, request.args.get("clip")), float(request.args.get("t", 60)))
     if img is None:
         abort(404)
     return Response(img, mimetype="image/jpeg")
@@ -202,6 +254,7 @@ def frame():
 
 @app.route("/api/calibration/<video_id>", methods=["GET", "POST"])
 def calibration(video_id):
+    check(VIDEO_RE, video_id)
     if request.method == "POST":
         d = request.get_json()
         db.save_calibration(video_id, [round(v) for v in d["red"]], [round(v) for v in d["blue"]])
@@ -211,6 +264,7 @@ def calibration(video_id):
 @app.post("/api/analyze")
 def analyze():
     d = request.get_json()
+    check(CLIP_RE, d.get("clip")), check(VIDEO_RE, d.get("video_id"))
     if clips.status(d["clip"])["state"] != "done":
         return jsonify(state="error", error="Download the clip first."), 400
     if d.get("force"):
@@ -220,7 +274,7 @@ def analyze():
 
 @app.get("/api/analysis")
 def get_analysis():
-    clip = request.args["clip"]
+    clip = check(CLIP_RE, request.args.get("clip"))
     out = analysis.result(clip)
     out["labels"] = db.shot_labels(clip, int(request.args["team"]))
     return jsonify(out)
@@ -229,7 +283,7 @@ def get_analysis():
 @app.post("/api/shot-label")
 def shot_label():
     d = request.get_json()
-    db.save_shot_label(d["clip"], int(d["burst"]), int(d["team"]), d["event"], int(d["match_id"]),
+    db.save_shot_label(check(CLIP_RE, d.get("clip")), int(d["burst"]), int(d["team"]), d["event"], int(d["match_id"]),
                        int(d["n"]), d["phase"], d["label"])
     return jsonify(ok=True)
 
@@ -237,6 +291,7 @@ def shot_label():
 @app.post("/api/event-video/autosync")
 def autosync_start():
     d = request.get_json()
+    check(EVENT_RE, d.get("event")), check(VIDEO_RE, d.get("video_id"))
     ev = ftcscout.event(d["event"], refresh=True) or {}
     starts = [video.ts(m["actualStartTime"]) for m in ev.get("matches") or [] if m.get("actualStartTime")]
     if not starts:
@@ -253,10 +308,11 @@ def autosync_status():
 def fix_sync():
     """Apply the offset the scoreboard reader measured (match start seen early/late in the clip)."""
     d = request.get_json()
-    db.shift_sync(d["event"], d["video_id"], float(d["delta"]))
+    db.shift_sync(check(EVENT_RE, d["event"]), check(VIDEO_RE, d["video_id"]), float(d["delta"]))
     return jsonify(ok=True)
 
 
 if __name__ == "__main__":
-    print("SnackScout running - open http://localhost:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    from waitress import serve
+    print(f"SnackScout running - open http://localhost:{PORT}" + ("  (team password on)" if TEAM_PASSWORD else ""))
+    serve(app, host=HOST, port=PORT, threads=12)

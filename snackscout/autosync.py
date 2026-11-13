@@ -12,6 +12,7 @@ import cv2
 import yt_dlp
 
 from . import cache, db, overlay
+from .config import YTDLP_EXTRA
 from .video import _QuietLogger
 
 AUTO_LEN, TRANSITION = 30, 8
@@ -24,7 +25,7 @@ def stream_url(video_id: str) -> str:
     hit = cache.get(key, 3 * 3600)
     if hit:
         return hit
-    opts = dict(quiet=True, no_warnings=True, logger=_QuietLogger(),
+    opts = dict(quiet=True, no_warnings=True, logger=_QuietLogger(), **YTDLP_EXTRA,
                 format="bv*[height<=480][vcodec^=avc1]/bv*[height<=480]/b[height<=480]")
     with yt_dlp.YoutubeDL(opts) as y:
         info = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)

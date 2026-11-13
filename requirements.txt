@@ -4,3 +4,4 @@ python-dotenv
 yt-dlp
 opencv-contrib-python
 numpy
+waitress

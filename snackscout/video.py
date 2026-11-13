@@ -15,7 +15,7 @@ import requests
 import yt_dlp
 
 from . import cache, db
-from .config import CLIP_BEFORE
+from .config import CLIP_BEFORE, YTDLP_EXTRA
 
 YT_ID_RE = re.compile(r"(?:v=|youtu\.be/|/live/|/shorts/|/embed/)([A-Za-z0-9_-]{11})")
 STOPWORDS = {"ftc", "first", "tech", "challenge", "the", "of", "and", "a", "at", "in", "for",
@@ -31,7 +31,7 @@ def ts(iso: str | None) -> float | None:
 
 def _ydl(**opts):
     base = dict(quiet=True, no_warnings=True, noprogress=True, skip_download=True,
-                ignore_no_formats_error=True, logger=_QuietLogger())
+                ignore_no_formats_error=True, logger=_QuietLogger(), **YTDLP_EXTRA)
     base.update(opts)
     return yt_dlp.YoutubeDL(base)
 

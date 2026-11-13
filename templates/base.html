@@ -10,7 +10,8 @@
 <body>
 <header class="top">
   <a class="logo" href="{{ url_for('index') }}">🍿 SnackScout</a>
-  <nav><a href="{{ url_for('events') }}">Competitions</a>{% if config.OUR_TEAM %}<a href="{{ url_for('team', number=config.OUR_TEAM) }}">Our team</a>{% endif %}</nav>
+  <nav><a href="{{ url_for('events') }}">Competitions</a>{% if config.OUR_TEAM %}<a href="{{ url_for('team', number=config.OUR_TEAM) }}">Our team</a>{% endif %}
+    {% if session.get('ok') %}<a href="{{ url_for('logout') }}">Log out</a>{% endif %}</nav>
   <form action="{{ url_for('search') }}">
     <input name="q" placeholder="Team number or name (or 16750, 3231 to compare)" value="{{ request.args.get('q','') }}">
     <button class="ghost">Scout</button>

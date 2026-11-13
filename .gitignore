@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 snackscout.db
 analysis/
+.secret_key
