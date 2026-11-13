@@ -152,7 +152,12 @@ def build(number: int, refresh=False):
     upcoming.sort(key=lambda e: e["start"])
 
     note_list = list(notes.values())
+    shots = db.team_shots(number)
+    cv = dict(n=len(shots), avg_shots=_avg([s["shots"] for s in shots]),
+              avg_auto=_avg([s["auto_shots"] for s in shots]), avg_endgame=_avg([s["endgame_shots"] for s in shots]),
+              max_shots=_max([s["shots"] for s in shots])) if shots else None
     return dict(
+        cv=cv,
         team=t, info=ftcevents.team_info(number), events=ordered, upcoming=upcoming,
         season=_summary(all_rows), latest=with_stats[0] if with_stats else None, best_opr=best_opr,
         quick=t.get("quickStats"), team_note=db.team_note(number),

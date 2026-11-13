@@ -3,14 +3,16 @@
 Run:  .venv\\Scripts\\python app.py   then open http://localhost:5000
 """
 import re
+from datetime import date
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from snackscout import clips, db, ftcscout, report, video
-from snackscout.config import CLIPS_DIR, OUR_TEAM, SEASON
+from snackscout import analysis, autosync, clips, db, ftcscout, report, strategy, video
+from snackscout.config import ANALYSIS_DIR, CLIPS_DIR, OUR_TEAM, SEASON
 from snackscout.ftcscout import ApiError
 
 app = Flask(__name__)
+app.config["OUR_TEAM"] = OUR_TEAM
 db.init()
 
 
@@ -60,6 +62,30 @@ def team(number):
     if not r:
         return render_template("error.html", message=f"Team {number} not found on FTCScout."), 404
     return render_template("team.html", r=r, number=number, season=SEASON)
+
+
+@app.route("/events")
+def events():
+    day = request.args.get("date") or date.today().isoformat()
+    todays = ftcscout.events_on(day)
+    ours = []
+    if OUR_TEAM:
+        r = report.build(int(OUR_TEAM))
+        ours = [e["event"] for e in (r["events"] if r else [])]
+        ours.sort(key=lambda e: e["start"])
+    our_codes = {e["code"] for e in ours}
+    todays.sort(key=lambda e: (e["code"] not in our_codes, e["location"]["country"] != "USA", e["name"]))
+    return render_template("events.html", day=day, todays=todays, ours=ours, our_codes=our_codes,
+                           today=date.today().isoformat(), our_team=OUR_TEAM)
+
+
+@app.route("/event/<code>")
+def event(code):
+    our = int(request.args.get("team") or OUR_TEAM or 0)
+    v = strategy.event_view(code.upper(), our, refresh=bool(request.args.get("refresh")))
+    if not v["event"] and not v["teams"]:
+        return render_template("error.html", message=f"Event {code} not found."), 404
+    return render_template("event.html", v=v, our=our, today=date.today().isoformat())
 
 
 @app.route("/compare")
@@ -157,6 +183,78 @@ def clip_status():
 @app.get("/clips/<path:name>")
 def serve_clip(name):
     return send_from_directory(CLIPS_DIR, name)
+
+
+# ---------------- OpenCV analysis ----------------
+
+@app.get("/analysis/<path:name>")
+def serve_analysis(name):
+    return send_from_directory(ANALYSIS_DIR, name)
+
+
+@app.get("/api/frame")
+def frame():
+    img = analysis.grab_frame(request.args["clip"], float(request.args.get("t", 60)))
+    if img is None:
+        abort(404)
+    return Response(img, mimetype="image/jpeg")
+
+
+@app.route("/api/calibration/<video_id>", methods=["GET", "POST"])
+def calibration(video_id):
+    if request.method == "POST":
+        d = request.get_json()
+        db.save_calibration(video_id, [round(v) for v in d["red"]], [round(v) for v in d["blue"]])
+    return jsonify(db.calibration(video_id))
+
+
+@app.post("/api/analyze")
+def analyze():
+    d = request.get_json()
+    if clips.status(d["clip"])["state"] != "done":
+        return jsonify(state="error", error="Download the clip first."), 400
+    if d.get("force"):
+        db.clear_shot_labels(d["clip"])  # burst numbering changes on a re-run
+    return jsonify(analysis.request(d["clip"], db.calibration(d["video_id"]), force=bool(d.get("force"))))
+
+
+@app.get("/api/analysis")
+def get_analysis():
+    clip = request.args["clip"]
+    out = analysis.result(clip)
+    out["labels"] = db.shot_labels(clip, int(request.args["team"]))
+    return jsonify(out)
+
+
+@app.post("/api/shot-label")
+def shot_label():
+    d = request.get_json()
+    db.save_shot_label(d["clip"], int(d["burst"]), int(d["team"]), d["event"], int(d["match_id"]),
+                       int(d["n"]), d["phase"], d["label"])
+    return jsonify(ok=True)
+
+
+@app.post("/api/event-video/autosync")
+def autosync_start():
+    d = request.get_json()
+    ev = ftcscout.event(d["event"], refresh=True) or {}
+    starts = [video.ts(m["actualStartTime"]) for m in ev.get("matches") or [] if m.get("actualStartTime")]
+    if not starts:
+        return jsonify(state="error", error="No played matches with official start times at this event yet."), 400
+    return jsonify(autosync.request(d["event"], d["video_id"], starts))
+
+
+@app.get("/api/event-video/autosync")
+def autosync_status():
+    return jsonify(autosync.status(request.args["event"], request.args["video_id"]))
+
+
+@app.post("/api/event-video/fix-sync")
+def fix_sync():
+    """Apply the offset the scoreboard reader measured (match start seen early/late in the clip)."""
+    d = request.get_json()
+    db.shift_sync(d["event"], d["video_id"], float(d["delta"]))
+    return jsonify(ok=True)
 
 
 if __name__ == "__main__":

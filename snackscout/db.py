@@ -1,4 +1,5 @@
 """Local SQLite storage for scouter notes and livestream links/sync settings."""
+import json
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -21,6 +22,13 @@ CREATE TABLE IF NOT EXISTS event_videos (
   event_code TEXT, video_id TEXT, title TEXT, start_ts REAL, duration REAL,
   sync_offset REAL DEFAULT 0, source TEXT, hidden INTEGER DEFAULT 0,
   PRIMARY KEY (event_code, video_id)
+);
+CREATE TABLE IF NOT EXISTS video_calib (
+  video_id TEXT PRIMARY KEY, red TEXT, blue TEXT
+);
+CREATE TABLE IF NOT EXISTS shot_labels (
+  clip TEXT, burst INTEGER, team INTEGER, event_code TEXT, match_id INTEGER,
+  n INTEGER, phase TEXT, label TEXT, PRIMARY KEY (clip, burst, team)
 );
 """
 
@@ -104,3 +112,51 @@ def set_sync(event_code, video_id, offset: float):
 def hide_video(event_code, video_id):
     with conn() as c:
         c.execute("UPDATE event_videos SET hidden=1 WHERE event_code=? AND video_id=?", (event_code, video_id))
+
+
+def shift_sync(event_code, video_id, delta: float):
+    with conn() as c:
+        c.execute("UPDATE event_videos SET sync_offset = sync_offset + ? WHERE event_code=? AND video_id=?",
+                  (delta, event_code, video_id))
+
+
+# ---- OpenCV: hive boxes per livestream, and scouts' shot labels ----
+def calibration(video_id):
+    with conn() as c:
+        r = c.execute("SELECT red, blue FROM video_calib WHERE video_id=?", (video_id,)).fetchone()
+    if not r:
+        return None
+    return {"red": json.loads(r["red"]), "blue": json.loads(r["blue"])}
+
+
+def save_calibration(video_id, red, blue):
+    with conn() as c:
+        c.execute("INSERT OR REPLACE INTO video_calib VALUES (?,?,?)", (video_id, json.dumps(red), json.dumps(blue)))
+
+
+def shot_labels(clip, team):
+    with conn() as c:
+        rows = c.execute("SELECT burst, label FROM shot_labels WHERE clip=? AND team=?", (clip, team)).fetchall()
+    return {r["burst"]: r["label"] for r in rows}
+
+
+def save_shot_label(clip, burst, team, event_code, match_id, n, phase, label):
+    with conn() as c:
+        c.execute("INSERT OR REPLACE INTO shot_labels VALUES (?,?,?,?,?,?,?,?)",
+                  (clip, burst, team, event_code, match_id, n, phase, label))
+
+
+def clear_shot_labels(clip):
+    with conn() as c:
+        c.execute("DELETE FROM shot_labels WHERE clip=?", (clip,))
+
+
+def team_shots(team):
+    """Per match: shots the scouts confirmed were this robot's, split auto / rest."""
+    with conn() as c:
+        rows = c.execute("""SELECT event_code, match_id,
+                              SUM(CASE WHEN label='ours' THEN n ELSE 0 END) shots,
+                              SUM(CASE WHEN label='ours' AND phase='auto' THEN n ELSE 0 END) auto_shots,
+                              SUM(CASE WHEN label='ours' AND phase='endgame' THEN n ELSE 0 END) endgame_shots
+                            FROM shot_labels WHERE team=? GROUP BY event_code, match_id""", (team,)).fetchall()
+    return [dict(r) for r in rows]

@@ -81,6 +81,38 @@ def team(number: int, season: int = SEASON, refresh=False):
     return data["teamByNumber"]
 
 
+EVENTS_ON_QUERY = """
+query($s: Int!, $d: Date!) {
+  eventsSearch(season: $s, start: $d, end: $d, limit: 400) {
+    code name start end type started ongoing finished timezone
+    location { city state country }
+  }
+}
+"""
+
+EVENT_QUERY = """
+query($s: Int!, $c: String!) {
+  eventByCode(season: $s, code: $c) {
+    code name start end timezone type started ongoing finished website liveStreamURL
+    location { venue city state country }
+    teams { teamNumber team { name } stats { ... on TeamEventStats2026 { rank rp wins losses ties qualMatchesPlayed opr { totalPointsNp } } } }
+    matches { description actualStartTime }
+  }
+}
+"""
+
+
+def events_on(day: str, season: int = SEASON):
+    data = _gql(EVENTS_ON_QUERY, {"s": season, "d": day}, f"ftcscout:eventson:{season}:{day}", max_age=3600)
+    return data["eventsSearch"]
+
+
+def event(code: str, season: int = SEASON, refresh=False):
+    data = _gql(EVENT_QUERY, {"s": season, "c": code}, f"ftcscout:event:{season}:{code}", max_age=120,
+                refresh=refresh)
+    return data["eventByCode"]
+
+
 def search_teams(text: str):
     data = _gql(SEARCH_QUERY, {"q": text}, f"ftcscout:search:{text.lower()}", max_age=24 * 3600)
     return data["teamsSearch"]

@@ -8,6 +8,7 @@
     <input name="q" autofocus style="flex:1;font-size:18px" placeholder="Team number or name">
     <button style="font-size:18px">Scout</button>
   </form>
+  <p style="margin-top:14px"><a class="btn" href="{{ url_for('events') }}">🏆 Competition day: pick our event</a></p>
   <p class="small muted" style="margin-top:14px">Type several numbers (e.g. <code>16750, 3231</code>) to compare alliance partners side by side.</p>
   {% if our_team %}<p><a href="{{ url_for('team', number=our_team) }}">Our team ({{ our_team }})</a></p>{% endif %}
 </div>

@@ -14,8 +14,9 @@ OUR_TEAM = os.getenv("OUR_TEAM_NUMBER", "")
 
 CACHE_DIR = ROOT / "cache"
 CLIPS_DIR = ROOT / "clips"
+ANALYSIS_DIR = ROOT / "analysis"
 DB_PATH = ROOT / "snackscout.db"
-for d in (CACHE_DIR, CLIPS_DIR):
+for d in (CACHE_DIR, CLIPS_DIR, ANALYSIS_DIR):
     d.mkdir(exist_ok=True)
 
 # How much video to grab around each match (seconds relative to match start).

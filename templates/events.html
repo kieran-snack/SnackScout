@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Competitions · SnackScout{% endblock %}
+{% block body %}
+<h2>Pick your competition</h2>
+{% if ours %}
+<h3>Snack Time ({{ our_team }}) events this season</h3>
+<div class="ev-list">
+  {% for e in ours %}
+  <a class="ev-item {% if e.start <= today <= e.end %}now{% elif e.end < today %}past{% endif %}" href="{{ url_for('event', code=e.code) }}">
+    <b>{{ e.name }}</b>
+    <span class="small muted">{{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · {{ e.location.city }}, {{ e.location.state }}</span>
+    {% if e.start <= today <= e.end %}<span class="chip on">TODAY</span>{% elif e.start > today %}<span class="chip">upcoming</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h3>All competitions on a day</h3>
+<form style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+  <input type="date" name="date" value="{{ day }}" onchange="this.form.submit()">
+  <a class="btn ghost small" href="?date={{ today }}">Today</a>
+  <input id="filter" placeholder="Filter by name, city, state…" oninput="filterEv(this.value)" style="flex:1;min-width:200px">
+</form>
+<div class="ev-list" id="day-list" style="margin-top:8px">
+  {% for e in todays %}
+  <a class="ev-item" href="{{ url_for('event', code=e.code) }}" data-q="{{ (e.name ~ ' ' ~ e.location.city ~ ' ' ~ e.location.state ~ ' ' ~ e.location.country ~ ' ' ~ e.code)|lower }}">
+    <b>{{ e.name }}</b>
+    <span class="small muted">{{ e.location.city }}, {{ e.location.state }}, {{ e.location.country }} · {{ e.code }}</span>
+    {% if e.code in our_codes %}<span class="chip on">we're registered</span>{% endif %}
+    {% if e.ongoing %}<span class="chip">in progress</span>{% elif e.finished %}<span class="chip">finished</span>{% endif %}
+  </a>
+  {% else %}<p class="muted">No FTC events on {{ day }}.</p>{% endfor %}
+</div>
+<script>
+function filterEv(q) { q = q.toLowerCase();
+  document.querySelectorAll('#day-list .ev-item').forEach(a => a.hidden = q && !a.dataset.q.includes(q)); }
+</script>
+{% endblock %}

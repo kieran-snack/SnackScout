@@ -62,6 +62,15 @@
 </div>
 {% endif %}
 
+{% if r.cv %}{% set cv = r.cv %}
+<h2>Video analysis (OpenCV, {{ cv.n }} matches reviewed)</h2>
+<div class="cards">
+  <div class="card"><div class="k">Pollen shots / match</div><div class="v">{{ cv.avg_shots|num }}</div><div class="s">best {{ cv.max_shots }}</div></div>
+  <div class="card"><div class="k">Auto shots</div><div class="v">{{ cv.avg_auto|num }}</div></div>
+  <div class="card"><div class="k">Last-minute shots</div><div class="v">{{ cv.avg_endgame|num }}</div><div class="s">nectar window</div></div>
+</div>
+{% endif %}
+
 <h2 id="pit">Pit scouting / robot notes</h2>
 <form class="panel" method="post" action="{{ url_for('team_notes', number=number) }}">
   <div class="pit-grid">
@@ -124,9 +133,9 @@
   </tr>
   <tr class="note-row" id="nr-{{ key }}" hidden><td colspan="17">
     <div class="scout-grid">
-      <div class="player-box"></div>
+      <div><div class="player-box"></div><div class="cv-box"></div></div>
       <form class="note-form" onsubmit="return saveNote(event, '{{ key }}')"
-            data-event="{{ m.event }}" data-id="{{ m.id }}" data-label="{{ m.label }}">
+            data-event="{{ m.event }}" data-id="{{ m.id }}" data-label="{{ m.label }}" data-alliance="{{ m.alliance|lower }}">
         {% set n = m.note or {} %}
         <div class="form-grid">
           <label>Auto pollen scored{{ counter('auto_pollen', n.auto_pollen) }}</label>
@@ -201,6 +210,7 @@ async function loadVideos(refresh) {
       <span class="chip">${esc(v.source)}</span>
       sync <input type="number" step="1" value="${v.sync_offset || 0}" style="width:80px"
         onchange="setSync('${code}','${v.video_id}',this.value)">s
+      <button class="small" onclick="autoSync('${code}','${v.video_id}', this)" title="Reads the scoreboard in the stream with OpenCV and lines it up with official match times">🔍 Auto-sync</button>
       <button class="ghost small" onclick="hideVideo('${code}','${v.video_id}')">Not this event</button></li>`).join('')
       : '<li class="muted">No livestream found automatically. Paste one below.</li>';
     if (!vids.length) d.open = true;
@@ -235,7 +245,191 @@ async function pollClip(key) {
   const st = (await (await fetch('/api/clip-status?name=' + encodeURIComponent(v.clip_name))).json())[v.clip_name];
   v.clip = st; renderVidCell(key);
   if (st.state === 'queued' || st.state === 'downloading') setTimeout(() => pollClip(key), 4000);
-  else if (st.state === 'done' && !document.getElementById('nr-' + key).hidden) showPlayer(key);
+  else if (st.state === 'done') {
+    if (!document.getElementById('nr-' + key).hidden) showPlayer(key);
+    if (v.autoAnalyze) { v.autoAnalyze = false; runAnalysis(key); }
+    else renderCV(key);
+  }
+}
+
+// ---------------- OpenCV analysis ----------------
+const fmtM = s => (s < 0 ? '-' : '') + fmtT(Math.abs(s));  // match time m:ss
+function cvForm(key) { return document.getElementById('nr-' + key).querySelector('form'); }
+
+async function renderCV(key) {
+  const row = document.getElementById('nr-' + key), box = row.querySelector('.cv-box'), v = VIDEO.matches[key];
+  if (row.hidden) return;
+  if (!v) { box.innerHTML = ''; return; }
+  if (!(v.clip && v.clip.state === 'done')) {
+    const busy = v.clip && (v.clip.state === 'queued' || v.clip.state === 'downloading');
+    box.innerHTML = `<div class="cv"><b>🔬 OpenCV analysis</b> ` + (busy
+      ? '<span class="spin"></span> downloading clip…'
+      : `<button class="small" onclick="downloadThenAnalyze('${key}')">Download clip &amp; analyze</button>`) + '</div>';
+    return;
+  }
+  const [cal, a] = await Promise.all([
+    fetch('/api/calibration/' + v.video_id).then(r => r.json()),
+    fetch(`/api/analysis?clip=${encodeURIComponent(v.clip_name)}&team=${TEAM}`).then(r => r.json())]);
+  v.cal = cal;
+  if (a.state === 'analyzing' || a.state === 'queued') {
+    box.innerHTML = '<div class="cv"><span class="spin"></span> Analyzing the video with OpenCV (about a minute)…</div>';
+    setTimeout(() => renderCV(key), 4000); return;
+  }
+  if (a.state !== 'done') {
+    box.innerHTML = `<div class="cv"><b>🔬 OpenCV analysis</b> ${a.state === 'error' ? '<span class="L">' + esc(a.error) + '</span>' : ''}
+      ${cal ? '' : '<p class="small muted">To count pollen shots, first mark where the two hives are in this stream. You only do this once per event, because the camera doesn\'t move.</p>'}
+      <button class="small" onclick="calibrate('${key}')">${cal ? 'Re-mark hives' : 'Mark hives'}</button>
+      <button class="small ${cal ? '' : 'ghost'}" onclick="runAnalysis('${key}')">${cal ? 'Analyze' : 'Scoreboard only'}</button></div>`;
+    return;
+  }
+  renderResult(key, a.result, a.labels || {});
+}
+
+function downloadThenAnalyze(key) { VIDEO.matches[key].autoAnalyze = true; makeClip(key); renderCV(key); }
+
+async function runAnalysis(key, force) {
+  const v = VIDEO.matches[key];
+  const r = await post('/api/analyze', {clip: v.clip_name, video_id: v.video_id, force: !!force});
+  if (r.state === 'error') alert(r.error);
+  renderCV(key);
+}
+
+function calibrate(key) {
+  const v = VIDEO.matches[key], box = document.getElementById('nr-' + key).querySelector('.cv-box');
+  const boxes = {red: v.cal && v.cal.red, blue: v.cal && v.cal.blue};
+  let side = 'red', drag = null;
+  box.innerHTML = `<div class="cv"><b>Mark the hives</b>
+    <p class="small cal-help"></p>
+    <div style="position:relative"><img class="cal-img" src="/api/frame?clip=${encodeURIComponent(v.clip_name)}&t=55" style="width:100%;display:block;border-radius:8px">
+      <canvas class="cal-cv" width="854" height="480" style="position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:none"></canvas></div>
+    <div style="margin-top:6px"><button class="small ghost" data-s="red">Redo red</button> <button class="small ghost" data-s="blue">Redo blue</button>
+      <button class="small cal-save">Save &amp; analyze</button> <button class="small ghost cal-cancel">Cancel</button></div></div>`;
+  const cv = box.querySelector('canvas'), ctx = cv.getContext('2d'), help = box.querySelector('.cal-help');
+  const draw = () => {
+    ctx.clearRect(0, 0, 854, 480);
+    for (const [s, b] of Object.entries(boxes)) if (b) {
+      ctx.strokeStyle = s === 'red' ? '#ff3b30' : '#2f8bff'; ctx.lineWidth = 3;
+      ctx.strokeRect(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+      ctx.fillStyle = ctx.strokeStyle; ctx.font = 'bold 16px sans-serif'; ctx.fillText(s.toUpperCase() + ' HIVE', b[0] + 4, b[1] + 18);
+    }
+    help.innerHTML = side ? `Drag a box around the <b style="color:${side === 'red' ? '#ff3b30' : '#2f8bff'}">${side.toUpperCase()} hive</b>. Include the whole hive and the space just under it where pollen flies in.` : 'Both hives marked. Click Save.';
+  };
+  const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 854, (e.clientY - r.top) / r.height * 480]; };
+  cv.onpointerdown = e => { if (!side) return; drag = pos(e); cv.setPointerCapture(e.pointerId); };
+  cv.onpointermove = e => { if (!drag) return; const p = pos(e);
+    boxes[side] = [Math.min(drag[0], p[0]), Math.min(drag[1], p[1]), Math.max(drag[0], p[0]), Math.max(drag[1], p[1])]; draw(); };
+  cv.onpointerup = () => { if (!drag) return; drag = null;
+    const b = boxes[side]; if (b && b[2] - b[0] > 8 && b[3] - b[1] > 8) side = side === 'red' && !boxes.blue ? 'blue' : null; draw(); };
+  box.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { side = b.dataset.s; boxes[side] = null; draw(); });
+  box.querySelector('.cal-cancel').onclick = () => renderCV(key);
+  box.querySelector('.cal-save').onclick = async () => {
+    if (!boxes.red || !boxes.blue) { alert('Mark both hives first.'); return; }
+    await post('/api/calibration/' + v.video_id, boxes);
+    runAnalysis(key, true);
+  };
+  if (boxes.red && boxes.blue) side = null;
+  draw();
+}
+
+function timelineSvg(r, ours) {
+  const W = 420, H = 120, t0 = r.match_start || 0, T = 160;
+  const pts = side => r.timeline.filter(p => p[side === 'red' ? 1 : 2] != null)
+    .map(p => [(p[0] - t0) / T * W, p[side === 'red' ? 1 : 2]]);
+  const max = Math.max(10, ...r.timeline.flatMap(p => [p[1] || 0, p[2] || 0]));
+  const line = (side, col) => `<polyline fill="none" stroke="${col}" stroke-width="${side === ours ? 3 : 1.5}" points="${
+    pts(side).filter(p => p[0] >= 0 && p[0] <= W).map(p => p[0].toFixed(1) + ',' + (H - p[1] / max * (H - 12) - 2).toFixed(1)).join(' ')}"/>`;
+  const x = s => (s / T * W).toFixed(1);
+  return `<svg viewBox="0 0 ${W} ${H + 14}" style="width:100%;max-width:520px">
+    <rect x="0" y="0" width="${x(30)}" height="${H}" fill="currentColor" opacity=".06"/>
+    <line x1="${x(98)}" x2="${x(98)}" y1="0" y2="${H}" stroke="currentColor" opacity=".25" stroke-dasharray="3 3"/>
+    ${line('red', 'var(--red)')}${line('blue', 'var(--blue)')}
+    <text x="2" y="${H + 12}" font-size="10" fill="currentColor" opacity=".6">auto</text>
+    <text x="${x(98) + 2}" y="${H + 12}" font-size="10" fill="currentColor" opacity=".6">last minute (nectar)</text>
+    <text x="${W - 2}" y="10" font-size="10" text-anchor="end" fill="currentColor" opacity=".6">${max} pts</text></svg>`;
+}
+
+function renderResult(key, r, labels) {
+  const v = VIDEO.matches[key], f = cvForm(key), ours = f.dataset.alliance, other = ours === 'red' ? 'blue' : 'red';
+  const box = document.getElementById('nr-' + key).querySelector('.cv-box');
+  v.result = r; v.labels = labels;
+  const A = r[ours], B = r[other];
+  let html = '<div class="cv"><b>🔬 OpenCV analysis</b> ';
+  if (!r.overlay_ok || r.match_start == null)
+    html += `<div class="banner" style="margin:6px 0">This clip doesn't contain the match, so the stream timing is probably off.
+      <button class="small" onclick="autoSync('${f.dataset.event}', '${v.video_id}', this)">🔍 Auto-sync this stream</button>
+      <span class="small muted">(OpenCV reads the scoreboard in the stream, about 2 minutes, then download the clip again)</span></div>`;
+  if (r.sync_error != null && Math.abs(r.sync_error) >= 1.5)
+    html += `<div class="banner" style="margin:6px 0">The match actually starts ${Math.abs(r.sync_error)} s ${r.sync_error > 0 ? 'later' : 'earlier'} in the video than expected.
+      <button class="small" onclick="fixSync('${key}', ${r.sync_error})">Fix sync for this stream</button></div>`;
+  if (r.overlay_ok) {
+    html += `<table style="margin:6px 0"><tr><th class="l"></th><th>Auto</th><th>Final</th><th class="l">Scoring moments (time into match)</th></tr>
+      ${[[ours, A], [other, B]].map(([s, x]) => `<tr><td class="l"><span class="chip" style="background:var(--${s}-bg)">${s}${s === ours ? ' (us)' : ''}</span></td>
+        <td>${x.auto ?? '–'}</td><td><b>${x.final ?? '–'}</b></td>
+        <td class="l small" style="white-space:normal">${x.events.map(e => `+${e.delta} @${fmtM(e.t)}`).join(' · ') || '–'}</td></tr>`).join('')}</table>
+      ${timelineSvg(r, ours)}`;
+  }
+  if (!r.hives_calibrated) {
+    html += `<p class="small muted">Shot counting is off. <button class="small" onclick="calibrate('${key}')">Mark hives</button> to turn it on.</p>`;
+  } else {
+    const count = s => { const sh = r.shots[s] || []; return `${sh.length} (auto ${sh.filter(x => x.phase === 'auto').length})`; };
+    const mine = r.bursts.filter(b => b.side === ours), theirs = r.bursts.filter(b => b.side === other);
+    const oursN = mine.filter(b => labels[b.i] === 'ours').reduce((a, b) => a + b.n, 0);
+    const oursAuto = mine.filter(b => labels[b.i] === 'ours' && b.phase === 'auto').reduce((a, b) => a + b.n, 0);
+    const left = mine.filter(b => !labels[b.i]).length;
+    html += `<p class="small">Pollen shots into the hive: <b>${ours} ${count(ours)}</b> · ${other} ${count(other)}
+      <button class="ghost small" onclick="calibrate('${key}')">Re-mark hives</button> <button class="ghost small" onclick="runAnalysis('${key}', true)">Re-run</button></p>
+      <p class="small"><b>Whose shot?</b> Tap Ours if <b>${TEAM}</b> launched it (the yellow circle shows where it was first seen).
+        ${left ? `<span class="muted">${left} left to review.</span>` : '<span class="yes">All reviewed ✓</span>'}
+        Ours so far: <b>${oursN}</b> shots (${oursAuto} in auto)
+        <button class="small" onclick="useShots('${key}', ${oursAuto}, ${oursN - oursAuto})">Put in form</button></p>
+      <div class="bursts">${mine.map(b => burstCard(key, b, labels[b.i])).join('') || '<span class="muted small">No shots found for this alliance.</span>'}</div>
+      ${theirs.length ? `<details class="small"><summary>Other alliance's shots (${theirs.length} bursts)</summary><div class="bursts">${theirs.map(b => burstCard(key, b, null, true)).join('')}</div></details>` : ''}`;
+  }
+  box.innerHTML = html + '</div>';
+}
+
+function burstCard(key, b, lab, readonly) {
+  const btn = (val, txt) => `<button class="small ${lab === val ? '' : 'ghost'}" onclick="labelBurst('${key}', ${b.i}, '${val}')">${txt}</button>`;
+  return `<div class="burst ${lab ? 'lab-' + lab : ''}">
+    ${b.img ? `<a href="${b.img}" target="_blank"><img src="${b.img}" loading="lazy"></a>` : ''}
+    <div class="small"><b>${fmtM(b.t)}</b> · ${b.n} shot${b.n > 1 ? 's' : ''} · ${b.phase}</div>
+    ${readonly ? '' : `<div>${btn('ours', 'Ours')} ${btn('partner', 'Partner')} ${btn('none', 'Not a shot')}</div>`}</div>`;
+}
+
+async function labelBurst(key, i, label) {
+  const v = VIDEO.matches[key], f = cvForm(key), b = v.result.bursts.find(x => x.i === i);
+  await post('/api/shot-label', {clip: v.clip_name, burst: i, team: TEAM, event: f.dataset.event, match_id: f.dataset.id, n: b.n, phase: b.phase, label});
+  v.labels[i] = label; renderResult(key, v.result, v.labels);
+}
+
+function useShots(key, auto, teleop) {
+  const f = cvForm(key); f.auto_pollen.value = auto; f.teleop_pollen.value = teleop;
+  f.querySelector('.saved').textContent = 'Filled from video (shots at hive). Check, then Save.';
+}
+
+async function autoSync(code, vid, btn) {
+  const r = await post('/api/event-video/autosync', {event: code, video_id: vid});
+  if (r.state === 'error') { alert(r.error); return; }
+  btn.disabled = true;
+  const poll = async () => {
+    const s = await (await fetch(`/api/event-video/autosync?event=${code}&video_id=${vid}`)).json();
+    if (s.state === 'queued' || s.state === 'scanning') {
+      btn.innerHTML = `<span class="spin"></span> scanning ${s.done ? s.done + '/' + s.total : ''}`;
+      setTimeout(poll, 2500); return;
+    }
+    btn.disabled = false; btn.textContent = '🔍 Auto-sync';
+    if (s.state === 'error') alert('Auto-sync failed: ' + s.error);
+    else { alert(`Synced: stream shifted ${s.shift} s (found ${s.matches_found} matches, ${s.matched} lined up with official times).`);
+           await loadVideos(); document.querySelectorAll('tr.note-row:not([hidden])').forEach(r => { const k = r.id.slice(3); showPlayer(k); renderCV(k); }); }
+  };
+  poll();
+}
+
+async function fixSync(key, delta) {
+  const v = VIDEO.matches[key], f = cvForm(key);
+  await post('/api/event-video/fix-sync', {event: f.dataset.event, video_id: v.video_id, delta});
+  alert('Sync fixed for this stream. Links now point to the right moment. Clips downloaded before this keep their old timing.');
+  await loadVideos(); showPlayer(key); renderCV(key);
 }
 
 function showPlayer(key) {
@@ -251,7 +445,7 @@ function toggleScout(key) {
   const row = document.getElementById('nr-' + key);
   row.hidden = !row.hidden;
   if (!row.hidden) {
-    showPlayer(key);
+    showPlayer(key); renderCV(key);
     const s = row.querySelector('[name=scouter]');
     if (!s.value) try { s.value = localStorage.getItem('scouter') || ''; } catch (e) {}
   } else row.querySelector('.player-box').innerHTML = '';

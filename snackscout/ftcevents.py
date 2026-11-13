@@ -35,6 +35,25 @@ def team_info(number: int, season: int = SEASON):
     return teams[0] if teams else None
 
 
+def event_teams(code: str, season: int = SEASON):
+    data = _get(f"/{season}/teams", {"eventCode": code}, max_age=3600)
+    return (data or {}).get("teams") or []
+
+
+def schedule(code: str, season: int = SEASON, refresh=False):
+    """Qualification + playoff schedule. Checked often because it appears on event day."""
+    out = []
+    for level in ("qual", "playoff"):
+        data = _get(f"/{season}/schedule/{code}", {"tournamentLevel": level}, max_age=60, refresh=refresh)
+        out += (data or {}).get("schedule") or []
+    return out
+
+
+def results(code: str, season: int = SEASON, refresh=False):
+    data = _get(f"/{season}/matches/{code}", max_age=60, refresh=refresh)
+    return (data or {}).get("matches") or []
+
+
 def team_events(number: int, season: int = SEASON, refresh=False):
     """All events the team is registered for, including future ones FTCScout may not show yet."""
     data = _get(f"/{season}/events", {"teamNumber": number}, refresh=refresh)
