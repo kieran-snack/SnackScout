@@ -27,9 +27,22 @@
   function playerHtml(v) {
     return `<iframe class="player" src="${v.embed || `https://www.youtube-nocookie.com/embed/${v.video_id}?start=${v.start}&autoplay=1&rel=0`}"
       allow="autoplay; encrypted-media; fullscreen" allowfullscreen title="Match video"></iframe>
-      <div class="small muted player-cap">${esc(v.title)} · starts ${fmt(v.start)} ·
-        <a href="https://www.youtube.com/watch?v=${v.video_id}&t=${v.start}s" target="_blank" rel="noopener">open on YouTube</a></div>`;
+      <div class="player-cap"><a class="btn ghost small" href="${ytUrl(v)}" target="_blank" rel="noopener">YouTube ↗</a>
+        <span class="small muted">${esc(v.title)} · starts ${fmt(v.start)}. Won't play here? Its owner turned off playback on other sites, so use YouTube ↗.</span></div>`;
   }
+  const ytUrl = v => `https://www.youtube.com/watch?v=${v.video_id}&t=${v.start}s`;
+  SS.ytUrl = ytUrl;
+
+  // "YouTube ↗" on event pages: the window opens right away (so pop-up blockers allow it), then goes to the match
+  SS.youtubeMatch = async (code, key) => {
+    const w = window.open('about:blank', '_blank');
+    try {
+      const v = await (await fetch(`/api/event/${code}/match/${encodeURIComponent(key)}/video`)).json();
+      if (v.video) { if (w) w.location = ytUrl(v.video); else location.href = ytUrl(v.video); return; }
+      if (w) w.close(); toast(v.reason || 'No video for this match.');
+    } catch (e) { if (w) w.close(); toast("Couldn't look up the video.", 'bad'); }
+  };
+
   SS.openPlayer = (v, title) => {
     const m = modal(`<h2 style="margin:0 0 10px">▶ ${esc(title || 'Match video')}</h2>${playerHtml(v)}`, 'wide');
   };

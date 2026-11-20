@@ -113,7 +113,7 @@
       {% if st %} · <span class="chip on">Rank #{{ st.rank }}</span> <span class="chip">{{ st.wins }}-{{ st.losses }}-{{ st.ties }}</span>{% endif %}</div>
   </div>
   <div class="table-tools">
-    <div class="small muted">▶ <b>Watch</b> opens the match on YouTube · <b>Scout</b> opens the video and scouting form here</div>
+    <div class="small muted">▶ <b>Watch here</b> plays it in SnackScout · <b>YouTube ↗</b> opens it on YouTube · <b>Scout</b> opens the video and scouting form</div>
     <label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" {% if prefs.extra_cols %}checked{% endif %} onchange="this.closest('.ev-block').querySelector('table.matches').classList.toggle('show-extra', this.checked)"> Show all columns</label>
   </div>
   <div class="table-wrap"><table class="matches compact{% if prefs.extra_cols %} show-extra{% endif %}">
@@ -277,7 +277,7 @@ function renderVidCell(key) {
   else if (v.clip && (v.clip.state === 'queued' || v.clip.state === 'downloading')) clip = '<span class="spin" title="Downloading clip… about 2 minutes"></span>';
   else clip = `<button class="ghost small" title="Download this match to watch offline" onclick="makeClip('${key}')">⬇</button>`;
   if (v.clip && v.clip.state === 'error') clip += ` <span class="L small" title="${esc(v.clip.error)}">failed</span>`;
-  td.innerHTML = `<span class="btn-row" style="flex-wrap:nowrap;justify-content:center"><button type="button" class="small" onclick="SS.openPlayer(VIDEO.matches['${key}'], document.getElementById('nr-${key}').querySelector('form').dataset.label)" title="${esc(v.title)} @ ${fmtT(v.offset)}">▶ Watch</button>${clip}</span>`;
+  td.innerHTML = `<span class="btn-row" style="flex-wrap:nowrap;justify-content:center"><button type="button" class="small" onclick="SS.openPlayer(VIDEO.matches['${key}'], document.getElementById('nr-${key}').querySelector('form').dataset.label)" title="Play it here: ${esc(v.title)} @ ${fmtT(v.offset)}">▶ Watch here</button><a class="btn ghost small" href="${SS.ytUrl(v)}" target="_blank" rel="noopener" title="Open on YouTube at the start of the match">YouTube ↗</a>${clip}</span>`;
 }
 
 async function makeClip(key) {
@@ -485,7 +485,8 @@ function showPlayer(key) {
   if (v.clip && v.clip.state === 'done') box.innerHTML = `<video class="player" src="${v.clip.url}" controls></video>`;
   else box.innerHTML = `<iframe class="player" allowfullscreen allow="autoplay; encrypted-media"
       src="https://www.youtube-nocookie.com/embed/${v.video_id}?start=${v.start}"></iframe>
-      <div class="small muted">${esc(v.title)} · ${fmtT(v.start)} · <a href="${v.url}" target="_blank">open on YouTube</a></div>`;
+      <div class="player-cap"><a class="btn ghost small" href="${SS.ytUrl(v)}" target="_blank" rel="noopener">YouTube ↗</a>
+        <span class="small muted">${esc(v.title)} · ${fmtT(v.start)}. Won't play here? Its owner turned off playback on other sites, so use YouTube ↗.</span></div>`;
 }
 
 function toggleScout(key) {

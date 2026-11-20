@@ -144,7 +144,8 @@
     {% if mk and mnotes.get(mk.key) %}<div class="small mnote-preview">🗒 {{ mnotes[mk.key]|truncate(140) }}</div>{% endif %}
     <div class="btn-row">
       {% if mk %}<button type="button" class="small" onclick="SS.scoutMatch('{{ code }}', '{{ mk.key }}', {team: {{ our }}})">📝 Scout</button>
-      {% if m.played %}<button type="button" class="small ghost" onclick="SS.watchMatch('{{ code }}', '{{ mk.key }}', '{{ m.description }}')">▶ Watch</button>{% endif %}{% endif %}
+      {% if m.played %}<button type="button" class="small ghost" onclick="SS.watchMatch('{{ code }}', '{{ mk.key }}', '{{ m.description }}')" title="Play it here in SnackScout">▶ Watch here</button>
+      <button type="button" class="small ghost" onclick="SS.youtubeMatch('{{ code }}', '{{ mk.key }}')" title="Open on YouTube at the start of the match">YouTube ↗</button>{% endif %}{% endif %}
       <a class="small" href="{{ url_for('compare', teams=([our] + m.partners|map(attribute='number')|list + m.opponents|map(attribute='number')|list)|join(',')) }}">⚖️ Compare all 4</a>
     </div>
   </div>
@@ -186,7 +187,8 @@
     <td class="l small insight">{% if m.ours and m.tips %}💡 {{ m.tips[0] }}{% elif m.insight %}{{ m.insight }}{% endif %}</td>
     <td><span class="btn-row" style="flex-wrap:nowrap">
       <button type="button" class="small" onclick="SS.scoutMatch('{{ code }}', '{{ m.key }}', {team: {{ our }}})" title="Watch and scout all 4 robots">📝 Scout</button>
-      {% if m.played %}<button type="button" class="small ghost" onclick="SS.watchMatch('{{ code }}', '{{ m.key }}', '{{ m.description }}')" title="Watch">▶</button>{% endif %}</span></td>
+      {% if m.played %}<button type="button" class="small ghost" onclick="SS.watchMatch('{{ code }}', '{{ m.key }}', '{{ m.description }}')" title="Watch here in SnackScout">▶</button>
+      <button type="button" class="small ghost" onclick="SS.youtubeMatch('{{ code }}', '{{ m.key }}')" title="Watch on YouTube">YT ↗</button>{% endif %}</span></td>
   </tr>
   {% endfor %}
   </tbody>

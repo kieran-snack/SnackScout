@@ -84,3 +84,4 @@ section.help li { margin: 6px 0; max-width: 78ch; }
 @media (max-width: 1180px) { .quick-btn .lbl, .quick-btn kbd { display: none; } nav.main a { white-space: nowrap; } }
 @media (max-width: 1000px) { nav.main a span.lbl { display: none; } }
 .modal > .ev-head { padding-right: 46px; }
+.player-cap { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
