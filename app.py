@@ -7,10 +7,12 @@ import re
 import time
 from datetime import date, timedelta
 
-from flask import (Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory,
+from functools import wraps
+
+from flask import (Flask, Response, abort, g, jsonify, redirect, render_template, request, send_from_directory,
                    session, url_for)
 
-from snackscout import analysis, autosync, clips, db, ftcscout, report, strategy, video
+from snackscout import analysis, autosync, clips, cloud, db, ftcscout, report, strategy, themes, video
 from snackscout.config import (ANALYSIS_DIR, CLIPS_DIR, HOST, LOCAL_NO_PASSWORD, OUR_TEAM, PORT, SEASON,
                                TEAM_PASSWORD, secret_key)
 from snackscout.ftcscout import ApiError
@@ -19,6 +21,7 @@ app = Flask(__name__)
 app.config.update(OUR_TEAM=OUR_TEAM, SECRET_KEY=secret_key(), PERMANENT_SESSION_LIFETIME=timedelta(days=60),
                   SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 db.init()
+cloud.start()
 
 CLIP_RE = re.compile(r"[A-Za-z0-9_-]+\.mp4")
 VIDEO_RE = re.compile(r"[A-Za-z0-9_-]{11}")
@@ -32,7 +35,10 @@ def check(pattern, value):
     return value
 
 
-# ---------------- team password ----------------
+# ---------------- accounts ----------------
+
+PUBLIC_ENDPOINTS = {"login", "signup", "setup", "static", "public_status"}
+
 
 def is_local_user():
     """Someone sitting at this laptop (not via the Cloudflare tunnel, a proxy, or the Wi-Fi)."""
@@ -42,30 +48,120 @@ def is_local_user():
     return request.remote_addr in ("127.0.0.1", "::1") and not proxied
 
 
+def team_code():
+    return db.team_config("team_code") or TEAM_PASSWORD
+
+
+def safe_next(default="/"):
+    nxt = request.args.get("next") or default
+    return nxt if nxt.startswith("/") and not nxt.startswith("//") else default
+
+
+def log_in(user):
+    session.clear()
+    session.permanent = True
+    session["user"] = user["username"]
+
+
 @app.before_request
 def require_login():
-    if not TEAM_PASSWORD or session.get("ok") or is_local_user():
-        return None
-    if request.endpoint in ("login", "static"):
+    g.user = None
+    if session.get("user"):
+        g.user = db.get_user(session["user"])
+        if not g.user:  # account removed
+            session.clear()
+    db.set_actor(g.user["username"] if g.user else None)
+    if g.user or request.endpoint in PUBLIC_ENDPOINTS:
         return None
     if request.path.startswith("/api/"):
         return jsonify(error="Log in first."), 401
+    if db.user_count() == 0:
+        return redirect(url_for("setup"))
     return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def inner(*a, **kw):
+        if not g.user or g.user["role"] != "admin":
+            abort(403)
+        return fn(*a, **kw)
+    return inner
+
+
+USERNAME_RE = re.compile(r"[a-z0-9_.-]{3,24}")
+
+
+def _validate_new_account(f):
+    u = db.norm_username(f.get("username"))
+    if not USERNAME_RE.fullmatch(u):
+        return "Usernames are 3-24 letters, numbers, dots, dashes or underscores."
+    if len(f.get("password") or "") < 6:
+        return "Passwords need at least 6 characters."
+    if f.get("password") != f.get("password2"):
+        return "The two passwords don't match."
+    if db.get_user(u):
+        return "That username is taken."
+    return None
+
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    """Create the first (admin) account."""
+    if db.user_count() > 0:
+        return redirect(url_for("login"))
+    local, code = is_local_user(), team_code()
+    error = None
+    if request.method == "POST":
+        f = request.form
+        error = _validate_new_account(f)
+        if not error and not local and not (code and hmac.compare_digest(f.get("code", "").encode(), code.encode())):
+            time.sleep(1)
+            error = "Wrong team code. (Or set SnackScout up from the team laptop itself.)"
+        new_code = (f.get("new_code") or "").strip()
+        if not error and new_code and (len(new_code) < 6 or " " in new_code):
+            error = "The team code needs 6+ characters and no spaces."
+        if not error:
+            if new_code:
+                db.set_team_config("team_code", new_code)
+            user = db.create_user(f["username"], f.get("display_name") or f["username"], f["password"], role="admin")
+            log_in(user)
+            return redirect(url_for("settings", welcome=1))
+    return render_template("setup.html", error=error, local=local, code=code)
+
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if db.user_count() == 0:
+        return redirect(url_for("setup"))
+    error = None
+    if request.method == "POST":
+        f = request.form
+        code = team_code()
+        if not code or not hmac.compare_digest(f.get("code", "").strip().encode(), code.encode()):
+            time.sleep(1)  # slow down guessing
+            error = "That team code isn't right. Ask your team lead for it."
+        else:
+            error = _validate_new_account(f)
+        if not error:
+            user = db.create_user(f["username"], f.get("display_name") or f["username"], f["password"])
+            log_in(user)
+            return redirect(safe_next())
+    return render_template("signup.html", error=error)
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if not TEAM_PASSWORD:
-        return redirect(url_for("index"))
+    if db.user_count() == 0:
+        return redirect(url_for("setup"))
     error = None
     if request.method == "POST":
-        if hmac.compare_digest(request.form.get("password", "").encode(), TEAM_PASSWORD.encode()):
-            session.permanent = True
-            session["ok"] = True
-            nxt = request.args.get("next") or "/"
-            return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else "/")
+        user = db.check_login(request.form.get("username"), request.form.get("password"))
+        if user:
+            log_in(user)
+            return redirect(safe_next())
         time.sleep(1)  # slow down password guessing
-        error = "Wrong password."
+        error = "Wrong username or password."
     return render_template("login.html", error=error)
 
 
@@ -75,6 +171,12 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.context_processor
+def inject_user():
+    prefs = db.get_prefs(g.user["username"]) if getattr(g, "user", None) else {}
+    return dict(current_user=getattr(g, "user", None), prefs=prefs, theme_css=themes.css(prefs))
+
+
 @app.template_filter("num")
 def num(v, digits=1):
     if v is None:
@@ -82,6 +184,12 @@ def num(v, digits=1):
     if isinstance(v, float):
         return f"{v:.{digits}f}"
     return v
+
+
+@app.template_filter("timestamp")
+def timestamp(v):
+    from datetime import datetime
+    return datetime.fromtimestamp(v).strftime("%b %d, %I:%M %p").replace(" 0", " ")
 
 
 @app.template_filter("pct")
@@ -96,7 +204,23 @@ def api_error(e):
 
 @app.route("/")
 def index():
-    return render_template("index.html", our_team=OUR_TEAM, season=SEASON)
+    """Home dashboard: our next competition, plus favorites/recent teams (kept in the browser)."""
+    today = date.today().isoformat()
+    next_ev, our = None, None
+    if OUR_TEAM:
+        try:
+            r = report.build(int(OUR_TEAM))
+        except ApiError:
+            r = None
+        if r:
+            our = r
+            evs = sorted((e["event"] for e in r["events"]), key=lambda e: e["start"])
+            next_ev = next((e for e in evs if e["start"] <= today <= e["end"]), None) or \
+                next((e for e in evs if e["start"] > today), None)
+            if next_ev:
+                days = (date.fromisoformat(next_ev["start"]) - date.today()).days
+                next_ev = dict(next_ev, days=days)
+    return render_template("index.html", our_team=OUR_TEAM, season=SEASON, next_ev=next_ev, our=our)
 
 
 @app.route("/search")
@@ -134,8 +258,10 @@ def events():
         ours.sort(key=lambda e: e["start"])
     our_codes = {e["code"] for e in ours}
     todays.sort(key=lambda e: (e["code"] not in our_codes, e["location"]["country"] != "USA", e["name"]))
+    d = date.fromisoformat(day)
     return render_template("events.html", day=day, todays=todays, ours=ours, our_codes=our_codes,
-                           today=date.today().isoformat(), our_team=OUR_TEAM)
+                           today=date.today().isoformat(), our_team=OUR_TEAM,
+                           prev_day=(d - timedelta(days=1)).isoformat(), next_day=(d + timedelta(days=1)).isoformat())
 
 
 @app.route("/event/<code>")
@@ -157,7 +283,7 @@ def compare():
 @app.post("/team/<int:number>/notes")
 def team_notes(number):
     db.save_team_note(number, request.form)
-    return redirect(url_for("team", number=number) + "#pit")
+    return redirect(url_for("team", number=number, saved=1) + "#pit")
 
 
 # ---------------- JSON API used by the page ----------------
@@ -170,6 +296,8 @@ def match_note():
         vals[k] = int(vals[k]) if str(vals.get(k) or "").strip().lstrip("-").isdigit() else None
     for k in ("defense", "broke_down"):
         vals[k] = 1 if vals.get(k) else 0
+    if not (vals.get("scouter") or "").strip():
+        vals["scouter"] = g.user["display_name"]
     db.save_match_note(int(d["team"]), d["event"], int(d["match_id"]), d.get("label"), vals)
     return jsonify(ok=True)
 
@@ -318,6 +446,116 @@ def fix_sync():
     d = request.get_json()
     db.shift_sync(check(EVENT_RE, d["event"]), check(VIDEO_RE, d["video_id"]), float(d["delta"]))
     return jsonify(ok=True)
+
+
+# ---------------- settings ----------------
+
+@app.route("/settings")
+def settings():
+    return render_template("settings.html", palettes=themes.PALETTES, users=db.list_users(),
+                           code=team_code() if g.user["role"] == "admin" else None,
+                           cloud_status=cloud.status(), admins=db.admin_count(),
+                           tab=request.args.get("tab", "look"), welcome=request.args.get("welcome"))
+
+
+@app.post("/api/prefs")
+def save_prefs():
+    prefs = themes.clean(request.get_json() or {})
+    db.save_prefs(g.user["username"], prefs)
+    return jsonify(ok=True, prefs=prefs, css=themes.css(prefs))
+
+
+@app.post("/settings/account")
+def settings_account():
+    f = request.form
+    changes = {}
+    name = (f.get("display_name") or "").strip()
+    if name and name != g.user["display_name"]:
+        changes["display_name"] = name[:40]
+    if f.get("new_password"):
+        if not db.check_login(g.user["username"], f.get("current_password")):
+            time.sleep(1)
+            return redirect(url_for("settings", tab="account", msg="Your current password isn't right.", bad=1))
+        if len(f["new_password"]) < 6 or f["new_password"] != f.get("new_password2"):
+            return redirect(url_for("settings", tab="account", msg="New passwords must match and be 6+ characters.", bad=1))
+        changes["password"] = f["new_password"]
+    if changes:
+        db.update_user(g.user["username"], **changes)
+    return redirect(url_for("settings", tab="account", msg="Saved." if changes else "Nothing changed."))
+
+
+@app.post("/settings/team/code")
+@admin_required
+def settings_team_code():
+    code = (request.form.get("code") or "").strip()
+    if len(code) < 6 or " " in code:
+        return redirect(url_for("settings", tab="team", msg="The team code needs 6+ characters and no spaces.", bad=1))
+    db.set_team_config("team_code", code)
+    return redirect(url_for("settings", tab="team", msg="Team code changed. Existing accounts keep working."))
+
+
+@app.post("/settings/team/user")
+@admin_required
+def settings_team_user():
+    u, action = db.norm_username(request.form.get("username")), request.form.get("action")
+    target = db.get_user(u)
+    if not target:
+        abort(404)
+    is_last_admin = target["role"] == "admin" and db.admin_count() <= 1
+    if action in ("make_member", "remove") and is_last_admin:
+        return redirect(url_for("settings", tab="team", msg="The team needs at least one admin.", bad=1))
+    if action == "make_admin":
+        db.update_user(u, role="admin")
+    elif action == "make_member":
+        db.update_user(u, role="member")
+    elif action == "remove":
+        db.update_user(u, deleted=1)
+    elif action == "reset":
+        import secrets
+        temp = "snack-" + secrets.token_hex(3)
+        db.update_user(u, password=temp)
+        return redirect(url_for("settings", tab="team", msg=f"Temporary password for {target['display_name']}: {temp}. "
+                                                            "They can change it in Settings → Account."))
+    return redirect(url_for("settings", tab="team", msg="Done."))
+
+
+@app.post("/settings/cloud")
+@admin_required
+def settings_cloud():
+    url, key = (request.form.get("url") or "").strip(), (request.form.get("key") or "").strip()
+    if not re.fullmatch(r"https://[a-z0-9-]+\.supabase\.co", url.rstrip("/")):
+        return redirect(url_for("settings", tab="cloud", msg="The URL should look like https://abcd1234.supabase.co", bad=1))
+    ok, msg = cloud.test(url, key)
+    if not ok:
+        return redirect(url_for("settings", tab="cloud", msg=msg, bad=1))
+    cloud.configure(url, key)
+    return redirect(url_for("settings", tab="cloud", msg="Connected! Your scouting will sync to the team cloud."))
+
+
+@app.get("/api/schema.sql")
+@admin_required
+def schema_sql():
+    return Response(cloud.SCHEMA_SQL.read_text(encoding="utf-8"), mimetype="text/plain")
+
+
+@app.post("/api/cloud/sync")
+def cloud_sync():
+    return jsonify(cloud.sync_now())
+
+
+@app.get("/api/cloud/status")
+def cloud_status():
+    s = cloud.status()
+    s.pop("url", None)
+    return jsonify(s)
+
+
+@app.get("/api/public/status")
+def public_status():
+    """For the launcher on this laptop: no secrets, just whether setup is needed and cloud health."""
+    s = cloud.status()
+    return jsonify(setup_needed=db.user_count() == 0, users=db.user_count(),
+                   cloud=dict(configured=s["configured"], ok=s["ok"], ago=s["ago"], pending=s["pending"]))
 
 
 if __name__ == "__main__":

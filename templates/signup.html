@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Create account · SnackScout{% endblock %}
+{% block body %}
+<div class="panel auth reveal">
+  <div class="auth-mark">🍿</div>
+  <h1>Join Snack Time scouting</h1>
+  <p class="muted">You'll need the <b>team code</b> from your team lead.</p>
+  <form method="post" class="auth-form" data-loading="Creating your account…">
+    <label>Team code<input name="code" required autocomplete="off" value="{{ request.form.get('code', '') }}"></label>
+    <label>Your name <span class="faint">(shown on your scouting)</span><input name="display_name" required maxlength="40" value="{{ request.form.get('display_name', '') }}" placeholder="e.g. Alex R."></label>
+    <label>Username<input name="username" required autocomplete="username" pattern="[A-Za-z0-9_.\-]{3,24}" value="{{ request.form.get('username', '') }}" placeholder="3-24 letters or numbers"></label>
+    <div class="two">
+      <label>Password<input type="password" name="password" required minlength="6" autocomplete="new-password"></label>
+      <label>Again<input type="password" name="password2" required minlength="6" autocomplete="new-password"></label>
+    </div>
+    {% if error %}<div class="form-err">{{ error }}</div>{% endif %}
+    <button class="wide">Create account</button>
+  </form>
+  <p class="small muted" style="margin-bottom:0">Already have one? <a href="{{ url_for('login') }}">Log in</a></p>
+</div>
+{% endblock %}

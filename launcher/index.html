@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SnackScout</title>
+<style>
+:root {
+  --bg: #17120d; --bg2: #1f1812; --card: #261d15; --card2: #2e241a; --line: #3b2f23;
+  --ink: #fbf3e8; --muted: #b9a68f; --faint: #7d6c59;
+  --brand: #f08a24; --brand2: #ffb547; --good: #43c47a; --warn: #f5c04a; --bad: #ef5a4c;
+  --r: 16px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+body { padding: 18px 18px 28px; user-select: none; }
+button { font: inherit; cursor: pointer; border: 0; border-radius: 12px; color: var(--ink); }
+input { font: inherit; color: var(--ink); background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; outline: none; }
+input:focus { border-color: var(--brand); }
+.top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.logo { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 26px;
+  background: linear-gradient(145deg, #ff9d3c, #d9611a); box-shadow: 0 6px 18px #f08a2433; }
+.top h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+.top .sub { color: var(--muted); font-size: 12.5px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+.card h2 { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin: 0 0 10px; }
+.hero { text-align: center; padding: 22px 16px 18px; position: relative; overflow: hidden; }
+.hero::before { content: ""; position: absolute; inset: -40% -20% auto; height: 220px;
+  background: radial-gradient(closest-side, #f08a2422, transparent); pointer-events: none; }
+.status { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+  background: var(--bg2); border: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
+.dot.good { background: var(--good); box-shadow: 0 0 0 0 #43c47a88; animation: pulse 2s infinite; }
+.dot.busy { background: var(--warn); animation: blink 1s infinite; }
+.dot.bad { background: var(--bad); }
+@keyframes pulse { 70% { box-shadow: 0 0 0 8px #43c47a00; } 100% { box-shadow: 0 0 0 0 #43c47a00; } }
+@keyframes blink { 50% { opacity: .35; } }
+.big { display: block; width: 100%; margin-top: 16px; padding: 15px; font-size: 17px; font-weight: 700;
+  background: linear-gradient(135deg, var(--brand2), var(--brand) 55%, #d9611a); color: #241404;
+  box-shadow: 0 8px 22px #f08a2440; transition: transform .1s, filter .15s; }
+.big:hover { filter: brightness(1.06); } .big:active { transform: scale(.985); }
+.big:disabled { filter: grayscale(.6) brightness(.8); cursor: default; }
+.ghost { background: var(--card2); border: 1px solid var(--line); padding: 9px 13px; font-weight: 600; }
+.ghost:hover { border-color: var(--brand); }
+.ghost.sm { padding: 6px 10px; font-size: 13px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.muted { color: var(--muted); } .faint { color: var(--faint); } .small { font-size: 12.5px; }
+.steps { text-align: left; margin: 16px auto 0; max-width: 300px; display: grid; gap: 8px; }
+.step { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.step .ic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px;
+  background: var(--bg2); border: 1px solid var(--line); flex: none; }
+.step.done { color: var(--ink); } .step.done .ic { background: var(--good); border-color: var(--good); color: #0b2415; }
+.step.now .ic { border-color: var(--warn); }
+.spin { width: 12px; height: 12px; border: 2px solid var(--warn); border-top-color: transparent; border-radius: 50%; animation: s 0.8s linear infinite; }
+@keyframes s { to { transform: rotate(360deg); } }
+.link { margin-top: 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.link .url { font-size: 22px; font-weight: 800; letter-spacing: .2px; color: var(--brand2); word-break: break-all; user-select: text; cursor: text; }
+.link .long { font-size: 11.5px; color: var(--faint); word-break: break-all; margin-top: 2px; user-select: text; }
+.qr { margin: 14px auto 4px; width: 172px; height: 172px; background: #fff; border-radius: 14px; padding: 8px; }
+.qr svg { width: 100%; height: 100%; display: block; }
+.pw { font-family: "Cascadia Mono", Consolas, monospace; font-size: 17px; letter-spacing: 1px; user-select: text; }
+.toggle { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.toggle:first-of-type { border-top: 0; padding-top: 0; }
+.switch { width: 42px; height: 24px; border-radius: 999px; background: var(--line); position: relative; flex: none; transition: background .2s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .2s; }
+.switch.on { background: var(--brand); } .switch.on::after { left: 21px; }
+.err { background: #3a1915; border: 1px solid #6b2a22; color: #ffd2cc; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+.tip { background: #2a2416; border: 1px solid #4a3d1f; color: #f3e2b5; border-radius: 12px; padding: 9px 12px; font-size: 12.5px; margin-top: 12px; text-align: left; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+pre { background: #0f0b08; border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 220px; overflow: auto;
+  font: 11px/1.4 "Cascadia Mono", Consolas, monospace; color: #cdbba5; white-space: pre-wrap; user-select: text; }
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 30px); opacity: 0; transition: .25s;
+  background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-weight: 600; pointer-events: none; }
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
+.hide { display: none !important; }
+.foot { text-align: center; color: var(--faint); font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="logo">🍿</div>
+  <div><h1>SnackScout</h1><div class="sub">Team 34672 · Snack Time · scouting launcher</div></div>
+</div>
+
+<div id="err" class="err hide"></div>
+
+<!-- ======================= main status ======================= -->
+<div class="card hero">
+  <span class="status"><span id="dot" class="dot"></span><span id="status-text">Offline</span></span>
+
+  <!-- offline -->
+  <div id="v-off">
+    <p class="muted" style="margin:14px 0 0">Share SnackScout with your team from this laptop.<br>Teammates log in with their own account.</p>
+    <button class="big" id="btn-online">🌐&nbsp; Go online</button>
+    <div class="row" style="margin-top:10px;justify-content:center">
+      <button class="ghost sm" id="btn-local">Just open it on this laptop</button>
+    </div>
+  </div>
+
+  <!-- connecting -->
+  <div id="v-connecting" class="hide">
+    <div class="steps">
+      <div class="step" id="st-server"><span class="ic"></span>Starting SnackScout</div>
+      <div class="step" id="st-tunnel"><span class="ic"></span>Connecting to Cloudflare</div>
+      <div class="step" id="st-link"><span class="ic"></span>Making your link</div>
+    </div>
+    <button class="ghost sm" style="margin-top:14px" onclick="call('go_offline')">Cancel</button>
+  </div>
+
+  <!-- online -->
+  <div id="v-online" class="hide">
+    <div class="link">
+      <div class="small muted" id="url-label">Your team link</div>
+      <div class="url" id="url-main"></div>
+      <div class="long" id="url-long"></div>
+      <div class="small" id="perm-note" style="margin-top:6px"></div>
+    </div>
+    <div class="qr" id="qr" title="Scan with a phone camera"></div>
+    <div class="small faint">Scan with a phone camera</div>
+    <div class="row wrap" style="margin-top:12px;justify-content:center">
+      <button class="ghost" id="btn-copy-link">📋 Copy link</button>
+      <button class="ghost" id="btn-share">💬 Copy invite for team</button>
+      <button class="ghost" id="btn-open">↗ Open</button>
+    </div>
+    <div class="tip">New links can take a minute to start working on this Wi-Fi. Phones on cellular usually work right away.</div>
+    <button class="ghost sm" style="margin-top:12px" onclick="call('go_offline')">Go offline</button>
+  </div>
+</div>
+
+<!-- ======================= password ======================= -->
+<div class="card hide" id="setup-card" style="border-color:var(--brand)">
+  <h2>First time?</h2>
+  <div class="row"><div class="grow">Create the <b>admin account</b> for your team.</div>
+    <button class="ghost sm" id="btn-setup">Set up</button></div>
+</div>
+
+<div class="card">
+  <h2>Team &amp; cloud</h2>
+  <div class="row"><div class="grow"><div style="font-weight:600">Accounts</div><div class="small muted" id="acct-line">–</div></div>
+    <button class="ghost sm" id="btn-team">Manage</button></div>
+  <div class="row" style="margin-top:10px"><div class="grow"><div style="font-weight:600"><span id="cloud-dot" class="dot" style="display:inline-block;margin-right:6px"></span>Team cloud</div>
+    <div class="small muted" id="cloud-line">–</div></div>
+    <button class="ghost sm" id="btn-cloud">Settings</button></div>
+</div>
+
+<div class="card">
+  <h2>Team code</h2>
+  <div id="pw-show" class="row">
+    <div class="grow pw" id="pw">••••••</div>
+    <button class="ghost sm" id="btn-eye">Show</button>
+    <button class="ghost sm" id="btn-copy-pw">Copy</button>
+    <button class="ghost sm" id="btn-change-pw">Change</button>
+  </div>
+  <div id="pw-edit" class="row hide">
+    <input class="grow" id="pw-input" placeholder="New team code (6+ characters)" maxlength="64">
+    <button class="ghost sm" id="btn-save-pw">Save</button>
+    <button class="ghost sm" id="btn-cancel-pw">Cancel</button>
+  </div>
+  <div class="small faint" style="margin-top:8px">Teammates type this once to create their account. Changing it doesn't log anyone out.</div>
+</div>
+
+<!-- ======================= this laptop ======================= -->
+<div class="card">
+  <h2>On this laptop &amp; same Wi-Fi</h2>
+  <div class="row">
+    <div class="grow"><div style="font-weight:600">This laptop</div><div class="small muted">localhost:5000</div></div>
+    <button class="ghost sm" id="btn-open-local">Open</button>
+  </div>
+  <div class="row" style="margin-top:10px" id="lan-row">
+    <div class="grow"><div style="font-weight:600">Same Wi-Fi</div><div class="small muted" id="lan-url"></div></div>
+    <button class="ghost sm" id="btn-copy-lan">Copy</button>
+  </div>
+  <div class="small faint" style="margin-top:8px" id="local-state"></div>
+</div>
+
+<!-- ======================= settings ======================= -->
+<div class="card">
+  <h2>Settings</h2>
+  <div class="toggle" data-key="keep_awake"><div class="grow"><div>Keep laptop awake while online</div>
+    <div class="small faint">Closing the lid may still put it to sleep. Keep it open and plugged in.</div></div><div class="switch"></div></div>
+  <div class="toggle" data-key="permanent_link"><div class="grow"><div>Permanent link</div>
+    <div class="small faint">kieran-snack.github.io/scout always points to SnackScout while you're online. Print the QR code once and reuse it.</div></div><div class="switch"></div></div>
+  <div class="toggle" data-key="auto_online"><div class="grow"><div>Go online when the launcher opens</div></div><div class="switch"></div></div>
+</div>
+
+<details class="card" style="padding:12px 16px">
+  <summary>Details and logs</summary>
+  <div class="row wrap" style="margin:10px 0">
+    <button class="ghost sm" onclick="call('open_folder','')">Open SnackScout folder</button>
+    <button class="ghost sm" onclick="call('open_folder','clips')">Open clips folder</button>
+    <button class="ghost sm" onclick="call('stop_all')">Stop everything</button>
+  </div>
+  <pre id="logs">Nothing yet.</pre>
+</details>
+
+<div class="foot">Closing this window stops SnackScout and takes the link offline.</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let S = null, showPw = false, editingPw = false;
+const $ = id => document.getElementById(id);
+const api = () => window.pywebview.api;
+async function call(fn, ...a) { const r = await api()[fn](...a); refresh(); return r; }
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1800); }
+const dur = s => s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + ' min' : Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min';
+
+function setStep(id, state) {
+  const el = $(id);
+  if (el.dataset.state === state) return;  // only redraw on change, so the spinner keeps spinning smoothly
+  el.dataset.state = state; el.className = 'step ' + state;
+  el.querySelector('.ic').innerHTML = state === 'done' ? '✓' : state === 'now' ? '<span class="spin"></span>' : '';
+}
+
+function render() {
+  if (!S) return;
+  const online = S.tunnel === 'online' && S.url, connecting = S.tunnel === 'connecting' || (S.tunnel === 'online' && !S.url);
+  $('v-off').classList.toggle('hide', online || connecting);
+  $('v-connecting').classList.toggle('hide', !connecting);
+  $('v-online').classList.toggle('hide', !online);
+  const dot = $('dot');
+  if (online) { dot.className = 'dot good'; $('status-text').textContent = 'Online · ' + dur(S.online_for || 0); }
+  else if (connecting) { dot.className = 'dot busy'; $('status-text').textContent = 'Connecting…'; }
+  else if (S.server === 'running') { dot.className = 'dot good'; $('status-text').textContent = 'Running on this laptop only'; }
+  else if (S.server === 'starting') { dot.className = 'dot busy'; $('status-text').textContent = 'Starting…'; }
+  else { dot.className = 'dot' + (S.tunnel === 'error' || S.server === 'error' ? ' bad' : ''); $('status-text').textContent = 'Offline'; }
+
+  if (connecting) {
+    setStep('st-server', S.server === 'running' ? 'done' : 'now');
+    setStep('st-tunnel', S.url ? 'done' : S.server === 'running' ? 'now' : '');
+    setStep('st-link', S.url && S.tunnel === 'online' ? 'done' : S.url ? 'now' : '');
+  }
+  if (online) {
+    const main = S.short_url || S.url;
+    $('url-main').textContent = main.replace('https://', '');
+    $('url-long').textContent = S.short_url ? 'Direct link: ' + S.url : '';
+    $('url-label').textContent = S.short_url ? 'Your permanent team link' : 'Your team link (changes each time)';
+    const pn = $('perm-note');
+    pn.style.color = S.permanent_state === 'error' ? 'var(--bad)' : 'var(--muted)';
+    pn.textContent = !S.settings.permanent_link ? ''
+      : S.permanent_state === 'updating' ? '⏳ Pointing kieran-snack.github.io/scout here…'
+      : S.permanent_state === 'error' ? '⚠ ' + (S.permanent_error || 'Permanent link failed. Share the link above instead.')
+      : S.permanent_state === 'live' ? '✓ Same link every time. Bookmark it.' : '';
+    if (S.qr && $('qr').dataset.for !== main) { $('qr').innerHTML = S.qr.replace(/<\?xml[^>]*>/, ''); $('qr').dataset.for = main; }
+  }
+  $('btn-online').disabled = !S.cloudflared;
+  $('btn-online').innerHTML = S.cloudflared ? '🌐&nbsp; Go online' : 'Cloudflare tunnel not installed';
+  $('btn-local').textContent = S.server === 'running' ? 'Open SnackScout on this laptop' : 'Just open it on this laptop';
+
+  if (!editingPw) $('pw').textContent = S.has_password ? (showPw ? S.password : '•'.repeat(Math.max(6, S.password.length))) : 'Not set yet';
+  $('btn-eye').textContent = showPw ? 'Hide' : 'Show';
+  $('btn-eye').classList.toggle('hide', !S.has_password);
+  $('btn-copy-pw').classList.toggle('hide', !S.has_password);
+  $('btn-change-pw').textContent = S.has_password ? 'Change' : 'Set team code';
+  const pub = S.public || {}, cl = pub.cloud || {};
+  $('setup-card').classList.toggle('hide', !pub.setup_needed);
+  $('acct-line').textContent = S.server !== 'running' ? 'Start SnackScout to see accounts' : pub.users ? `${pub.users} teammate${pub.users === 1 ? '' : 's'} signed up` : 'No accounts yet';
+  $('cloud-dot').className = 'dot' + (!cl.configured ? '' : cl.ok === false ? ' bad' : cl.ok ? ' good' : ' busy');
+  $('cloud-line').textContent = S.server !== 'running' ? '–' : !cl.configured ? 'Not set up: scouting stays on this laptop' :
+    cl.ok === false ? "Can't reach the cloud right now (changes upload later)" : cl.pending ? `${cl.pending} changes waiting to upload` :
+    cl.ago != null ? `Synced ${cl.ago < 60 ? cl.ago + ' s' : Math.round(cl.ago / 60) + ' min'} ago` : 'Connecting…';
+
+  $('lan-url').textContent = S.lan_url ? S.lan_url.replace('http://', '') : 'Not connected to a network';
+  $('lan-row').classList.toggle('hide', !S.lan_url);
+  $('local-state').textContent = S.server === 'running' ? (S.external ? 'SnackScout is already running in another window.' : 'SnackScout is running.')
+    : S.server === 'starting' ? 'Starting… the first start can take 10–20 seconds.' : 'SnackScout is stopped. Opening it starts it.';
+
+  document.querySelectorAll('.toggle').forEach(t => t.querySelector('.switch').classList.toggle('on', !!S.settings[t.dataset.key]));
+  $('err').classList.toggle('hide', !S.error); $('err').textContent = S.error || '';
+  const logs = $('logs'), atBottom = logs.scrollTop + logs.clientHeight >= logs.scrollHeight - 8;
+  logs.textContent = S.logs.length ? S.logs.join('\n') : 'Nothing yet.';
+  if (atBottom) logs.scrollTop = logs.scrollHeight;
+}
+
+async function refresh() { try { S = await api().state(); render(); } catch (e) {} }
+
+function wire() {
+  $('btn-online').onclick = () => { if (!S.has_password) { startPwEdit(); toast('Set a team code first'); return; } call('go_online'); };
+  $('btn-local').onclick = async () => { await call('start_local'); waitAndOpen(); };
+  $('btn-open-local').onclick = async () => { await call('start_local'); waitAndOpen(); };
+  $('btn-copy-link').onclick = () => { call('copy', S.short_url || S.url); toast('Link copied'); };
+  $('btn-share').onclick = () => { call('copy', S.share_text); toast('Invite copied: paste it in your team chat'); };
+  $('btn-open').onclick = () => call('open', S.short_url || S.url);
+  $('btn-copy-lan').onclick = () => { call('copy', S.lan_url); toast('Wi-Fi link copied'); };
+  $('btn-eye').onclick = () => { showPw = !showPw; render(); };
+  $('btn-copy-pw').onclick = () => { call('copy', S.password); toast('Team code copied'); };
+  const openPage = async path => { await call('start_local'); for (let i = 0; i < 90 && S.server !== 'running'; i++) { await new Promise(r => setTimeout(r, 1000)); await refresh(); } call('open', S.local_url + path); };
+  $('btn-setup').onclick = () => openPage('/setup');
+  $('btn-team').onclick = () => openPage('/settings?tab=team');
+  $('btn-cloud').onclick = () => openPage('/settings?tab=cloud');
+  $('btn-change-pw').onclick = startPwEdit;
+  $('btn-cancel-pw').onclick = () => { editingPw = false; $('pw-edit').classList.add('hide'); $('pw-show').classList.remove('hide'); };
+  $('btn-save-pw').onclick = savePw;
+  $('pw-input').onkeydown = e => { if (e.key === 'Enter') savePw(); if (e.key === 'Escape') $('btn-cancel-pw').click(); };
+  document.querySelectorAll('.toggle').forEach(t => t.onclick = async () => {
+    S.settings = await api().set_setting(t.dataset.key, !S.settings[t.dataset.key]); render(); });
+}
+function startPwEdit() { editingPw = true; $('pw-show').classList.add('hide'); $('pw-edit').classList.remove('hide'); $('pw-input').value = ''; $('pw-input').focus(); }
+async function savePw() {
+  const r = await api().set_password($('pw-input').value);
+  if (!r.ok) { toast(r.error); return; }
+  editingPw = false; $('pw-edit').classList.add('hide'); $('pw-show').classList.remove('hide'); toast('Team code saved'); refresh();
+}
+async function waitAndOpen() {
+  for (let i = 0; i < 90; i++) { await refresh(); if (S.server === 'running') { call('open', S.local_url); return; } if (S.server === 'error') return; await new Promise(r => setTimeout(r, 1000)); }
+}
+
+window.addEventListener('pywebviewready', () => { wire(); refresh(); setInterval(refresh, 1000); });
+</script>
+</body>
+</html>

@@ -1,23 +1,71 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="panel" style="max-width:640px;margin:40px auto;text-align:center">
-  <div style="font-size:56px">🍿</div>
+<div class="home-hero">
+  <div class="mark">🍿</div>
   <h1>SnackScout</h1>
-  <p class="muted">Alliance-partner scouting for Team Snack Time · FTC BIOBUZZ {{ season }}-{{ (season + 1) % 100 }}</p>
-  <form action="{{ url_for('search') }}" style="display:flex;gap:8px;margin-top:14px">
-    <input name="q" autofocus style="flex:1;font-size:18px" placeholder="Team number or name">
-    <button style="font-size:18px">Scout</button>
+  <p class="muted" style="margin:6px 0 0">Alliance-partner scouting for Team Snack Time · FTC BIOBUZZ {{ season }}-{{ (season + 1) % 100 }}</p>
+  <form action="{{ url_for('search') }}" data-loading="Looking up team…">
+    <input name="q" autofocus placeholder="Type a team number or name" aria-label="Team number or name" autocomplete="off">
+    <button>Scout</button>
   </form>
-  <p style="margin-top:14px"><a class="btn" href="{{ url_for('events') }}">🏆 Competition day: pick our event</a></p>
-  <p class="small muted" style="margin-top:14px">Type several numbers (e.g. <code>16750, 3231</code>) to compare alliance partners side by side.</p>
-  {% if our_team %}<p><a href="{{ url_for('team', number=our_team) }}">Our team ({{ our_team }})</a></p>{% endif %}
+  <p class="small faint" style="margin-top:10px">Tip: type <b>several numbers</b> like <code>16750, 3231</code> to compare them · press <kbd>/</kbd> anywhere to search</p>
 </div>
-<div class="panel" style="max-width:640px;margin:0 auto">
-  <h3>Where the data comes from</h3>
-  <ul class="small">
-    <li><b>FTCScout + FTC Events API</b>: official scores, ranks, OPR, and per-robot auto leave/park and teleop park.</li>
-    <li><b>YouTube (yt-dlp)</b>: finds each event's livestream, jumps to each match, and can download match clips (ffmpeg) so you can watch them without Wi-Fi.</li>
-    <li><b>Your scouts</b>: pollen/nectar counts per robot come from the scouting form next to each clip, because the official data only counts per alliance.</li>
+
+<div class="home-grid">
+  <div>
+    {% if next_ev %}
+    <div class="next-ev">
+      <div class="lbl">{% if next_ev.days <= 0 %}🔴 Happening now{% elif next_ev.days == 1 %}Tomorrow{% else %}Next competition · in {{ next_ev.days }} days{% endif %}</div>
+      <h2>{{ next_ev.name }}</h2>
+      <div style="opacity:.9">{{ next_ev.start }}{% if next_ev.end != next_ev.start %} – {{ next_ev.end }}{% endif %} · {{ next_ev.location.city }}, {{ next_ev.location.state }}</div>
+      <a class="btn" href="{{ url_for('event', code=next_ev.code) }}">🏆 Open event day: schedule, partners &amp; strategy</a>
+    </div>
+    {% else %}
+    <div class="panel"><h3 style="margin-top:0">🏆 Competition day</h3>
+      <p class="muted">Pick the event you're at to see your schedule, partners, predictions and strategy.</p>
+      <a class="btn" href="{{ url_for('events') }}">Choose a competition</a></div>
+    {% endif %}
+
+    {% if our and our.season %}{% set s = our.season %}{% set q = our.quick %}
+    <div class="panel">
+      <div class="ev-head"><h3 style="margin:0">⭐ {{ our.team.number }} {{ our.team.name }} this season</h3>
+        <a class="small" href="{{ url_for('team', number=our_team) }}">Full report →</a></div>
+      <div class="cards" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
+        <div class="card"><div class="k">OPR</div><div class="v">{{ q.tot.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.tot.rank }} worldwide{% endif %}</div></div>
+        <div class="card"><div class="k">Record</div><div class="v">{{ s.wins }}-{{ s.losses }}-{{ s.ties }}</div></div>
+        <div class="card"><div class="k">Auto OPR</div><div class="v">{{ q.auto.value|num if q else '–' }}</div></div>
+        <div class="card"><div class="k">Parks</div><div class="v">{{ s.park_rate|pct }}</div></div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="panel">
+      <h3 style="margin-top:0">★ Favorite teams</h3>
+      <div class="team-chips" data-team-list="favs" data-empty="Tap ☆ on a team's page to pin it here."></div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0">🕘 Recently viewed</h3>
+      <div class="team-chips" data-team-list="recent" data-empty="Teams you open will show up here."></div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0">⚖️ Quick compare</h3>
+      <form action="{{ url_for('compare') }}" class="btn-row" data-loading="Comparing teams…">
+        <input name="teams" placeholder="e.g. 34672, 16750, 3231" style="flex:1;min-width:180px">
+        <button>Compare</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<details class="panel flat" style="margin-top:20px">
+  <summary><b>Where does the data come from?</b></summary>
+  <ul class="small" style="margin-bottom:0">
+    <li><b>FTCScout + FTC Events API</b>: official scores, ranks, OPR, and each robot's auto leave/park and endgame park.</li>
+    <li><b>YouTube (yt-dlp)</b>: finds each event's livestream and jumps to every match. Clips can be downloaded to watch without Wi-Fi.</li>
+    <li><b>OpenCV</b>: reads the scoreboard in match videos and spots pollen shots.</li>
+    <li><b>Your scouts</b>: per-robot pollen counts come from the Scout form on each match. Official data only counts per alliance.</li>
   </ul>
-</div>
+</details>
 {% endblock %}

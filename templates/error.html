@@ -1,4 +1,10 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="panel"><h2>Hmm, that didn't work</h2><p>{{ message }}</p><p><a href="{{ url_for('index') }}">Back</a></p></div>
+<div class="panel auth" style="max-width:520px">
+  <div style="font-size:44px">🤔</div>
+  <h2 style="justify-content:center;margin-top:6px">That didn't work</h2>
+  <p>{{ message }}</p>
+  <div class="btn-row" style="justify-content:center"><a class="btn" href="{{ url_for('index') }}">Home</a>
+    <button class="ghost" onclick="history.back()">Go back</button></div>
+</div>
 {% endblock %}

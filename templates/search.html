@@ -1,14 +1,19 @@
 {% extends "base.html" %}
+{% block title %}Search: {{ q }} · SnackScout{% endblock %}
 {% block body %}
-<h2>Teams matching “{{ q }}”</h2>
+<h1>Teams matching “{{ q }}”</h1>
 {% if results %}
-<div class="table-wrap"><table>
-  <tr><th>#</th><th class="l">Name</th><th class="l">Location</th></tr>
+<p class="muted">{{ results|length }} found. Pick one.</p>
+<div class="ev-list">
   {% for t in results %}
-  <tr><td><a href="{{ url_for('team', number=t.number) }}">{{ t.number }}</a></td>
-      <td class="l"><a href="{{ url_for('team', number=t.number) }}">{{ t.name }}</a></td>
-      <td class="l muted">{{ t.location.city }}, {{ t.location.state }}, {{ t.location.country }}</td></tr>
+  <a class="ev-item" href="{{ url_for('team', number=t.number) }}">
+    <div class="when" style="min-width:74px"><b style="font-size:16px">{{ t.number }}</b></div>
+    <div class="grow"><div class="name">{{ t.name }}</div><div class="small muted">📍 {{ t.location.city }}, {{ t.location.state }}, {{ t.location.country }}</div></div>
+    <span class="small">Open →</span>
+  </a>
   {% endfor %}
-</table></div>
-{% else %}<p class="muted">No teams found.</p>{% endif %}
+</div>
+{% else %}
+<div class="empty" style="margin-top:14px">No teams found. Try the team number, or part of the name.</div>
+{% endif %}
 {% endblock %}

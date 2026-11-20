@@ -16,12 +16,33 @@ OUR_TEAM = os.getenv("OUR_TEAM_NUMBER", "")
 # "Sign in to confirm you're not a bot" from YouTube; cookies usually fix that. Use a throwaway account.
 YTDLP_EXTRA = {"cookiefile": os.getenv("YTDLP_COOKIES")} if os.getenv("YTDLP_COOKIES") else {}
 
-# Web hosting: when TEAM_PASSWORD is set, every page needs the password first.
+# Team code: teammates need it once to create their account. (Stored in .env as TEAM_PASSWORD; once an
+# admin changes it in Settings, the team-wide value in the database/cloud wins.)
 TEAM_PASSWORD = os.getenv("TEAM_PASSWORD", "")
-# On the team laptop, people using it directly (http://localhost) skip the password; visitors through the
-# tunnel or Wi-Fi still need it. Set to 0 on a real server.
+# Before any account exists, people at this laptop (http://localhost) may create the first admin account.
 LOCAL_NO_PASSWORD = os.getenv("LOCAL_NO_PASSWORD", "1") == "1"
 HOST = os.getenv("HOST", "0.0.0.0")
+
+# Team cloud (Supabase). The service_role key stays on the laptop/server only; it's never sent to browsers.
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
+
+def env_set(key, value):
+    """Add or replace one line in .env."""
+    p = ROOT / ".env"
+    lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+    out, done = [], False
+    for line in lines:
+        if line.startswith(key + "="):
+            out.append(f"{key}={value}")
+            done = True
+        else:
+            out.append(line)
+    if not done:
+        out.append(f"{key}={value}")
+    p.write_text("\n".join(out) + "\n", encoding="utf-8")
+    os.environ[key] = value
 PORT = int(os.getenv("PORT", "5000"))
 
 
@@ -38,7 +59,7 @@ def secret_key() -> str:
 CACHE_DIR = ROOT / "cache"
 CLIPS_DIR = ROOT / "clips"
 ANALYSIS_DIR = ROOT / "analysis"
-DB_PATH = ROOT / "snackscout.db"
+DB_PATH = Path(os.getenv("SNACKSCOUT_DB") or ROOT / "snackscout.db")  # override only for tests
 for d in (CACHE_DIR, CLIPS_DIR, ANALYSIS_DIR):
     d.mkdir(exist_ok=True)
 

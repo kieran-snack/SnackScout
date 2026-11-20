@@ -1,26 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Compare · SnackScout{% endblock %}
 {% block body %}
-<h2>Compare alliance partners</h2>
-<form action="{{ url_for('compare') }}" style="display:flex;gap:6px;max-width:520px">
-  <input name="teams" value="{{ teams }}" placeholder="e.g. 16750, 3231, 23269" style="flex:1">
+<h1>⚖️ Compare teams</h1>
+<p class="muted" style="margin-top:6px">Line up possible partners side by side. Green marks the best value in each row.</p>
+<form action="{{ url_for('compare') }}" class="btn-row" style="max-width:620px;margin-top:12px" data-loading="Comparing teams…">
+  <input name="teams" value="{{ teams }}" placeholder="Team numbers, e.g. 34672, 16750, 3231" style="flex:1;min-width:220px" aria-label="Team numbers">
   <button>Compare</button>
 </form>
 {% set ok = reports|selectattr(1)|list %}
-{% if ok %}
-{# each row: label, function name, higher_is_better #}
+{% if not reports %}
+  <div class="panel" style="margin-top:16px"><b>Quick add from favorites</b>
+    <div class="team-chips" style="margin-top:8px" data-team-list="favs" data-empty="No favorites yet. Tap ☆ on a team's page."></div></div>
+{% elif ok %}
 {% set rows = [
-  ('OPR (no penalties)', 'opr', True), ('Auto OPR', 'auto_opr', True), ('Teleop OPR', 'dc_opr', True),
-  ('World OPR rank', 'rank', False), ('Record', 'record', None),
-  ('Hive tips / match (alliance)', 'avg_tips', True), ('Auto tip rate', 'auto_tip_rate', True),
-  ('Hive pollen+nectar (alliance)', 'avg_hive_elements', True), ('Nectar used (alliance)', 'nectar_rate', True),
-  ('Auto leave (robot)', 'leave_rate', True), ('Auto park (robot)', 'auto_park_rate', True), ('Endgame park (robot)', 'park_rate', True),
-  ('Penalties / match', 'avg_penalties', False), ('Swarm RP', 'swarm_rate', True), ('Pollinator 1 RP', 'pollinator1_rate', True),
-  ('Scouted pollen / match', 'sc_pollen', True), ('Scouted accuracy', 'sc_acc', True), ('Scouted nectar', 'sc_nectar', True),
-  ('Breakdowns seen', 'sc_break', False), ('Elements (pit)', 'elements', None), ('Drivetrain (pit)', 'drivetrain', None),
+  ('Scoring', 'section', None),
+  ('OPR (points per match)', 'opr', True), ('Auto OPR', 'auto_opr', True), ('Teleop OPR', 'dc_opr', True),
+  ('World rank', 'rank', False), ('Record', 'record', None),
+  ('This robot', 'section', None),
+  ('Leaves in auto', 'leave_rate', True), ('Parks in auto', 'auto_park_rate', True), ('Parks at the end', 'park_rate', True),
+  ('Penalty points given / match', 'avg_penalties', False),
+  ('Their alliances (includes partners)', 'section', None),
+  ('Hive tips / match', 'avg_tips', True), ('Tips the hive in auto', 'auto_tip_rate', True),
+  ('Pollen + nectar left in hive', 'avg_hive_elements', True), ('Uses nectar', 'nectar_rate', True),
+  ('Swarm RP', 'swarm_rate', True), ('Pollinator 1 RP', 'pollinator1_rate', True),
+  ('Our scouts', 'section', None),
+  ('Pollen / match', 'sc_pollen', True), ('Accuracy', 'sc_acc', True), ('Nectar / match', 'sc_nectar', True),
+  ('Breakdowns seen', 'sc_break', False), ('Video: shots / match', 'cv_shots', True),
+  ('Pit notes', 'section', None),
+  ('Scores', 'elements', None), ('Drivetrain', 'drivetrain', None), ('Shooter', 'shooter', None),
 ] %}
 {% macro val(r, f) -%}
-  {%- set s = r.season or {} -%}{%- set q = r.quick -%}{%- set sc = r.scouted or {} -%}
+  {%- set s = r.season or {} -%}{%- set q = r.quick -%}{%- set sc = r.scouted or {} -%}{%- set cv = r.cv or {} -%}
   {%- if f == 'opr' -%}{{ q.tot.value|round(1) if q else '' }}
   {%- elif f == 'auto_opr' -%}{{ q.auto.value|round(1) if q else '' }}
   {%- elif f == 'dc_opr' -%}{{ q.dc.value|round(1) if q else '' }}
@@ -30,20 +40,36 @@
   {%- elif f == 'sc_acc' -%}{{ sc.accuracy if sc and sc.accuracy is not none else '' }}
   {%- elif f == 'sc_nectar' -%}{{ sc.avg_nectar if sc and sc.avg_nectar is not none else '' }}
   {%- elif f == 'sc_break' -%}{{ sc.breakdowns if sc else '' }}
-  {%- elif f in ('elements', 'drivetrain') -%}{{ r.team_note[f] or '' }}
+  {%- elif f == 'cv_shots' -%}{{ cv.avg_shots if cv and cv.avg_shots is not none else '' }}
+  {%- elif f in ('elements', 'drivetrain', 'shooter') -%}{{ r.team_note[f] or '' }}
   {%- else -%}{{ s[f] if s and s[f] is not none else '' }}
   {%- endif -%}
 {%- endmacro %}
-<div class="table-wrap compare" style="margin-top:12px"><table>
-  <tr><th class="l"></th>{% for n, r in reports %}<th>{% if r %}<a href="{{ url_for('team', number=n) }}">{{ n }}</a><br><span class="small">{{ r.team.name }}</span>{% else %}{{ n }}<br><span class="small">not found</span>{% endif %}</th>{% endfor %}</tr>
+{% set nums_list = reports|map(attribute=0)|list %}
+<div class="table-wrap compare" style="margin-top:14px"><table>
+  <tr><th class="l" style="min-width:190px"></th>{% for n, r in reports %}
+    <th style="min-width:160px;white-space:normal;text-transform:none;letter-spacing:0">
+      <div class="btn-row" style="justify-content:center;flex-wrap:nowrap">
+        <a href="{{ url_for('team', number=n) }}" style="font-size:16px">{{ n }}</a>
+        {% if nums_list|length > 1 %}<a class="faint" title="Remove from comparison" href="{{ url_for('compare', teams=nums_list|reject('equalto', n)|join(',')) }}">✕</a>{% endif %}
+      </div>
+      <div style="color:var(--ink);font-weight:600">{{ r.team.name if r else 'not found' }}</div>
+      {% if r and r.verdict %}<div class="tags" style="justify-content:center;margin-top:6px">{% for text, kind in r.verdict[:3] %}<span class="tag {{ kind }}" style="font-size:11px;padding:2px 7px">{{ text }}</span>{% endfor %}</div>{% endif %}
+    </th>{% endfor %}</tr>
   {% for label, f, hib in rows %}
+  {% if f == 'section' %}
+  <tr><td class="l" colspan="{{ reports|length + 1 }}" style="background:var(--panel2);font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">{{ label }}</td></tr>
+  {% else %}
   {% set vals = [] %}{% for n, r in reports %}{% set _ = vals.append(val(r, f)|trim if r else '') %}{% endfor %}
-  {% set nums = vals|reject('equalto', '')|map('float')|list %}
+  {% set nums = vals|reject('equalto', '')|map('float')|list if hib is not none else [] %}
   {% set best = (nums|max if hib else nums|min) if (hib is not none and nums|length > 1 and nums|max != nums|min) else none %}
   <tr><td class="l">{{ label }}</td>
-    {% for v in vals %}<td class="{{ 'best' if best is not none and v != '' and v|float == best }}">{{ v if v != '' else '–' }}{% if v != '' and f.endswith('rate') or (v != '' and f == 'sc_acc') %}%{% endif %}</td>{% endfor %}</tr>
+    {% for v in vals %}<td class="{{ 'best' if best is not none and v != '' and v|float == best }}">{{ v if v != '' else '–' }}{% if v != '' and (f.endswith('rate') or f == 'sc_acc') %}%{% endif %}</td>{% endfor %}</tr>
+  {% endif %}
   {% endfor %}
 </table></div>
-<p class="small muted">Green = best in the row. Alliance stats include each team's partners, so lean on OPR and the per-robot rows.</p>
+<p class="small muted">"Their alliances" numbers include each team's partners, so lean on OPR and the "This robot" rows when judging one robot.</p>
+{% else %}
+  <div class="empty" style="margin-top:16px">None of those teams were found.</div>
 {% endif %}
 {% endblock %}

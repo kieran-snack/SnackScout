@@ -7,3 +7,5 @@ __pycache__/
 snackscout.db
 analysis/
 .secret_key
+launcher_settings.json
+.launcher_webview/

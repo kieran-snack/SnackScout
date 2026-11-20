@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Set up SnackScout{% endblock %}
+{% block body %}
+<div class="panel auth reveal" style="max-width:480px">
+  <div class="auth-mark">🍿</div>
+  <h1>Set up SnackScout</h1>
+  <p class="muted">Create the first account. It becomes the <b>admin</b>, who can manage teammates, the team code and the team cloud.</p>
+  <form method="post" class="auth-form" data-loading="Setting up…">
+    {% if not local %}
+    <label>Current team code<input name="code" required autocomplete="off"></label>
+    {% endif %}
+    <label>Your name<input name="display_name" required maxlength="40" value="{{ request.form.get('display_name', '') }}"></label>
+    <label>Username<input name="username" required pattern="[A-Za-z0-9_.\-]{3,24}" autocomplete="username" value="{{ request.form.get('username', '') }}"></label>
+    <div class="two">
+      <label>Password<input type="password" name="password" required minlength="6" autocomplete="new-password"></label>
+      <label>Again<input type="password" name="password2" required minlength="6" autocomplete="new-password"></label>
+    </div>
+    <label>Team code for teammates <span class="faint">(they use it once to sign up)</span>
+      <input name="new_code" value="{{ code or '' }}" minlength="6" placeholder="e.g. snack-2027"></label>
+    {% if error %}<div class="form-err">{{ error }}</div>{% endif %}
+    <button class="wide">Create admin account</button>
+  </form>
+</div>
+{% endblock %}

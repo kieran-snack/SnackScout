@@ -1,61 +1,82 @@
 {% extends "base.html" %}
 {% block title %}{{ number }} {{ r.team.name }} · SnackScout{% endblock %}
+{% block bodyattrs %}data-visit="{{ number }}|{{ r.team.name }}"{% endblock %}
 {% macro yn(v) %}{% if v %}<span class="yes">✓</span>{% else %}<span class="no">✗</span>{% endif %}{% endmacro %}
+{% macro tip(text) %}<span class="tip" tabindex="0" data-tip="{{ text }}">?</span>{% endmacro %}
 {% macro counter(name, val) %}
-  <span class="counter"><button type="button" class="ghost small" onclick="bump(this,-1)">−</button>
+  <span class="counter"><button type="button" class="ghost small" onclick="bump(this,-1)" aria-label="minus">−</button>
   <input name="{{ name }}" inputmode="numeric" value="{{ val if val is not none else '' }}">
-  <button type="button" class="ghost small" onclick="bump(this,1)">+</button></span>
+  <button type="button" class="ghost small" onclick="bump(this,1)" aria-label="plus">+</button></span>
 {% endmacro %}
 {% block body %}
 {% set t = r.team %}{% set s = r.season %}{% set q = r.quick %}{% set tn = r.team_note %}
-<div class="ev-head">
-  <div>
-    <h1>{{ t.number }} · {{ t.name }}</h1>
-    <div class="muted">
-      {{ t.location.city }}, {{ t.location.state }}, {{ t.location.country }} · Rookie year {{ t.rookieYear }}
-      {% if t.schoolName %} · {{ t.schoolName }}{% endif %}
-      {% if r.info and r.info.robotName %} · Robot: <b>{{ r.info.robotName }}</b>{% endif %}
+{% set our = config.OUR_TEAM|string %}
+
+<div class="hero">
+  <div style="min-width:0">
+    <div class="num">TEAM {{ t.number }}{% if our == number|string %} · THAT'S US{% endif %}</div>
+    <h1>{{ t.name }}</h1>
+    <div class="meta">📍 {{ t.location.city }}, {{ t.location.state }}{% if t.location.country != 'USA' %}, {{ t.location.country }}{% endif %}
+      · Rookie year {{ t.rookieYear }}{% if t.schoolName %} · {{ t.schoolName }}{% endif %}
+      {% if r.info and r.info.robotName %} · 🤖 <b>{{ r.info.robotName }}</b>{% endif %}</div>
+    <div class="links">
+      <a href="https://ftcscout.org/teams/{{ number }}" target="_blank" rel="noopener">FTCScout ↗</a>
+      <a href="https://ftc-events.firstinspires.org/{{ season }}/team/{{ number }}" target="_blank" rel="noopener">FTC Events ↗</a>
+      {% if t.website %}<a href="{{ t.website }}" target="_blank" rel="noopener">Website ↗</a>{% endif %}
     </div>
-    <div class="small" style="margin-top:4px">
-      <a href="https://ftcscout.org/teams/{{ number }}" target="_blank">FTCScout</a> ·
-      <a href="https://ftc-events.firstinspires.org/{{ season }}/team/{{ number }}" target="_blank">FTC Events</a>
-      {% if t.website %} · <a href="{{ t.website }}" target="_blank">Website</a>{% endif %}
-    </div>
+    {% if r.verdict %}<div class="tags">{% for text, kind in r.verdict %}<span class="tag {{ kind }}">{{ text }}</span>{% endfor %}</div>{% endif %}
   </div>
-  <div><a class="btn ghost" href="?refresh=1">↻ Refresh data</a>
-       <a class="btn ghost" href="{{ url_for('compare', teams=number) }}">Compare…</a></div>
+  <div class="btn-row">
+    <button class="ghost star" data-fav="{{ number }}" data-name="{{ t.name }}" type="button">☆</button>
+    {% if our and our != number|string %}<a class="btn" href="{{ url_for('compare', teams=our ~ ',' ~ number) }}">⚖️ Compare with us</a>{% endif %}
+    <button class="ghost" type="button" onclick="SS.copy(location.href.split('?')[0], 'Link to this team copied')" title="Copy a link to this page">🔗</button>
+    <a class="btn ghost" href="?refresh=1" title="Get the latest data from FTCScout">↻ Refresh</a>
+  </div>
 </div>
 
-<h2>At a glance (season)</h2>
+<nav class="subnav" id="subnav">
+  <a href="#overview">Overview</a>
+  <a href="#matches">Matches{% if s %} <span class="faint">{{ s.n }}</span>{% endif %}</a>
+  <a href="#pit">Robot notes</a>
+  <a href="#videos">Videos</a>
+</nav>
+
+<section id="overview">
+<h2>Season at a glance</h2>
 {% if s %}
 <div class="cards">
-  <div class="card"><div class="k">OPR (no penalties)</div><div class="v">{{ q.tot.value|num if q else '–' }}</div>
-    <div class="s">{% if q %}#{{ q.tot.rank }} of {{ q.count }} worldwide{% endif %}</div></div>
-  <div class="card"><div class="k">Auto OPR</div><div class="v">{{ q.auto.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.auto.rank }}{% endif %}</div></div>
-  <div class="card"><div class="k">Teleop OPR</div><div class="v">{{ q.dc.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.dc.rank }}{% endif %}</div></div>
-  <div class="card"><div class="k">Record</div><div class="v">{{ s.wins }}-{{ s.losses }}-{{ s.ties }}</div><div class="s">{{ s.n }} matches</div></div>
-  <div class="card"><div class="k">Hive tips / match</div><div class="v">{{ s.avg_tips|num }}</div><div class="s">max {{ s.max_tips }} · auto tip {{ s.auto_tip_rate|pct }}</div></div>
-  <div class="card"><div class="k">Pollen+Nectar in hive</div><div class="v">{{ s.avg_hive_elements|num }}</div><div class="s">alliance avg · max {{ s.max_hive_elements }}</div></div>
-  <div class="card"><div class="k">Auto leave (robot)</div><div class="v">{{ s.leave_rate|pct }}</div><div class="s">auto park {{ s.auto_park_rate|pct }}</div></div>
-  <div class="card"><div class="k">Endgame park (robot)</div><div class="v">{{ s.park_rate|pct }}</div><div class="s">avg {{ s.avg_park_pts|num }} pts</div></div>
-  <div class="card"><div class="k">Penalties given / match</div><div class="v">{{ s.avg_penalties|num }}</div><div class="s">{{ s.majors }} majors total</div></div>
-  <div class="card"><div class="k">Swarm RP</div><div class="v">{{ s.swarm_rate|pct }}</div><div class="s">Pollinator {{ s.pollinator1_rate|pct }} / {{ s.pollinator2_rate|pct }}</div></div>
-  <div class="card"><div class="k">Flower / Nectar</div><div class="v">{{ s.avg_flower_pts|num }}</div><div class="s">flower pts · nectar used {{ s.nectar_rate|pct }}</div></div>
-  <div class="card"><div class="k">Avg alliance score</div><div class="v">{{ s.avg_score|num }}</div><div class="s">auto {{ s.avg_auto|num }} · teleop {{ s.avg_teleop|num }}</div></div>
+  <div class="card hl"><div class="k">OPR {{ tip("Offensive Power Rating: about how many points this robot adds to its alliance each match, not counting penalties. Higher is better.") }}</div>
+    <div class="v">{{ q.tot.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.tot.rank }} of {{ q.count }} worldwide{% endif %}</div></div>
+  <div class="card hl"><div class="k">Record</div><div class="v">{{ s.wins }}-{{ s.losses }}-{{ s.ties }}</div><div class="s">{{ s.n }} matches played</div></div>
+  <div class="card"><div class="k">Auto OPR {{ tip("Points this robot adds in the 30-second autonomous period.") }}</div><div class="v">{{ q.auto.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.auto.rank }} worldwide{% endif %}</div></div>
+  <div class="card"><div class="k">Teleop OPR {{ tip("Points this robot adds while drivers control it (the last 2 minutes).") }}</div><div class="v">{{ q.dc.value|num if q else '–' }}</div><div class="s">{% if q %}#{{ q.dc.rank }} worldwide{% endif %}</div></div>
 </div>
-<p class="banner">“Hive tips”, “Pollen+Nectar” and RPs are <b>alliance totals</b> from the official data, so they include the partner robot too.
-  OPR estimates this robot's own share. Leave and park are tracked for <b>this robot</b>. For exact per-robot pollen counts, scout the clips below.</p>
+
+<h3>This robot</h3>
+<div class="cards">
+  <div class="card"><div class="k">Leaves in auto {{ tip("How often this robot drives out of its starting zone in auto. Free points.") }}</div><div class="v">{{ s.leave_rate|pct }}</div><div class="s">parks in auto {{ s.auto_park_rate|pct }}</div></div>
+  <div class="card"><div class="k">Parks at the end {{ tip("How often this robot is parked when the match ends.") }}</div><div class="v">{{ s.park_rate|pct }}</div><div class="s">avg {{ s.avg_park_pts|num }} pts</div></div>
+  <div class="card"><div class="k">Penalties given {{ tip("Penalty points the other alliance received per match because of this alliance's fouls. Lower is better.") }}</div><div class="v">{{ s.avg_penalties|num }}</div><div class="s">per match · {{ s.majors }} majors</div></div>
+</div>
+
+<h3>Their alliances <span class="small muted" style="font-weight:500">(includes partners)</span></h3>
+<div class="cards">
+  <div class="card"><div class="k">Hive tips {{ tip("How many times their alliance tipped the hive per match. Each tip is worth a lot of points.") }}</div><div class="v">{{ s.avg_tips|num }}</div><div class="s">best {{ s.max_tips }} · tips in auto {{ s.auto_tip_rate|pct }}</div></div>
+  <div class="card"><div class="k">Pollen + nectar in hive</div><div class="v">{{ s.avg_hive_elements|num }}</div><div class="s">left in hive at the end · best {{ s.max_hive_elements }}</div></div>
+  <div class="card"><div class="k">Flower points {{ tip("Points from flowers their alliance owned. Nectar on top decides who owns a flower.") }}</div><div class="v">{{ s.avg_flower_pts|num }}</div><div class="s">used nectar in {{ s.nectar_rate|pct }} of matches</div></div>
+  <div class="card"><div class="k">Bonus RPs {{ tip("Ranking points for Swarm and Pollinator goals. These decide rankings at events.") }}</div><div class="v">{{ s.swarm_rate|pct }}</div><div class="s">Swarm · Pollinator {{ s.pollinator1_rate|pct }} / {{ s.pollinator2_rate|pct }}</div></div>
+  <div class="card"><div class="k">Alliance score</div><div class="v">{{ s.avg_score|num }}</div><div class="s">auto {{ s.avg_auto|num }} · teleop {{ s.avg_teleop|num }}</div></div>
+</div>
 {% else %}
-<p class="muted">No played matches with scores yet this season.</p>
+<div class="empty">No played matches with scores yet this season.{% if r.upcoming %} Their first event is coming up below.{% endif %}</div>
 {% endif %}
 
 {% if r.scouted %}{% set sc = r.scouted %}
-<h2>Our scouting ({{ sc.n }} matches scouted)</h2>
+<h3>📝 Our scouts saw <span class="small muted" style="font-weight:500">({{ sc.n }} matches scouted)</span></h3>
 <div class="cards">
-  <div class="card"><div class="k">Auto pollen</div><div class="v">{{ sc.avg_auto_pollen|num }}</div></div>
-  <div class="card"><div class="k">Teleop pollen</div><div class="v">{{ sc.avg_teleop_pollen|num }}</div><div class="s">best match {{ sc.max_pollen }}</div></div>
-  <div class="card"><div class="k">Nectar</div><div class="v">{{ sc.avg_nectar|num }}</div></div>
-  <div class="card"><div class="k">Accuracy</div><div class="v">{{ sc.accuracy|pct }}</div></div>
+  <div class="card"><div class="k">Pollen per match</div><div class="v">{{ ((sc.avg_auto_pollen or 0) + (sc.avg_teleop_pollen or 0))|round(1) }}</div><div class="s">auto {{ sc.avg_auto_pollen|num }} · teleop {{ sc.avg_teleop_pollen|num }} · best {{ sc.max_pollen }}</div></div>
+  <div class="card"><div class="k">Accuracy</div><div class="v">{{ sc.accuracy|pct }}</div><div class="s">scored ÷ shot</div></div>
+  <div class="card"><div class="k">Nectar</div><div class="v">{{ sc.avg_nectar|num }}</div><div class="s">per match</div></div>
   <div class="card"><div class="k">Hive tips caused</div><div class="v">{{ sc.avg_tips|num }}</div></div>
   <div class="card"><div class="k">Broke down</div><div class="v">{{ sc.breakdowns }}</div><div class="s">played defense {{ sc.defense }}×</div></div>
   <div class="card"><div class="k">Driver rating</div><div class="v">{{ sc.avg_rating|num }}</div><div class="s">out of 5</div></div>
@@ -63,7 +84,7 @@
 {% endif %}
 
 {% if r.cv %}{% set cv = r.cv %}
-<h2>Video analysis (OpenCV, {{ cv.n }} matches reviewed)</h2>
+<h3>🔬 Video analysis <span class="small muted" style="font-weight:500">({{ cv.n }} matches reviewed)</span></h3>
 <div class="cards">
   <div class="card"><div class="k">Pollen shots / match</div><div class="v">{{ cv.avg_shots|num }}</div><div class="s">best {{ cv.max_shots }}</div></div>
   <div class="card"><div class="k">Auto shots</div><div class="v">{{ cv.avg_auto|num }}</div></div>
@@ -71,7 +92,124 @@
 </div>
 {% endif %}
 
-<h2 id="pit">Pit scouting / robot notes</h2>
+{% if r.upcoming %}
+<h3>📅 Coming up</h3>
+<div class="ev-list">{% for u in r.upcoming %}
+  <a class="ev-item" href="{{ url_for('event', code=u.code) }}"><div class="when"><b>{{ u.start[8:10]|int }}</b><span>{{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][u.start[5:7]|int] }}</span></div>
+    <div class="grow"><div class="name">{{ u.name }}</div><div class="small muted">{{ u.city }} · {{ u.code }}</div></div><span class="small">Open →</span></a>
+{% endfor %}</div>
+{% endif %}
+</section>
+
+<section id="matches">
+<h2>Matches</h2>
+{% set played_events = r.events|selectattr('matches')|list %}
+{% if not played_events %}<div class="empty">No matches yet this season.</div>{% endif %}
+{% for ev in played_events %}{% set e = ev.event %}{% set st = ev.stats %}
+<div class="ev-block">
+  <div class="ev-title">
+    <h3><a href="{{ url_for('event', code=e.code) }}" style="color:inherit">{{ e.name }}</a></h3>
+    <div class="small muted">{{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · {{ e.location.city }}, {{ e.location.state }}
+      {% if st %} · <span class="chip on">Rank #{{ st.rank }}</span> <span class="chip">{{ st.wins }}-{{ st.losses }}-{{ st.ties }}</span>{% endif %}</div>
+  </div>
+  <div class="table-tools">
+    <div class="small muted">▶ <b>Watch</b> opens the match on YouTube · <b>Scout</b> opens the video and scouting form here</div>
+    <label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" {% if prefs.extra_cols %}checked{% endif %} onchange="this.closest('.ev-block').querySelector('table.matches').classList.toggle('show-extra', this.checked)"> Show all columns</label>
+  </div>
+  <div class="table-wrap"><table class="matches compact{% if prefs.extra_cols %} show-extra{% endif %}">
+    <tr><th class="l">Match</th><th>With</th><th>Against</th><th>Result</th><th>Auto</th><th>Teleop</th>
+        <th title="hive tips in auto / whole match">Tips</th>
+        <th class="extra" title="pollen+nectar left in the hive">Hive</th><th class="extra">Garden</th><th class="extra" title="flower points (pollen/nectar)">Flower</th>
+        <th title="this robot left its start zone in auto">Leave</th><th class="extra" title="this robot's auto park points">A.Park</th><th title="this robot's endgame park points">Park</th>
+        <th title="penalty points given away">Pen.</th><th class="extra" title="bonus ranking points">RP</th><th>Video</th><th></th></tr>
+    {% for m in ev.matches %}{% set key = m.event ~ ':' ~ m.id %}
+    <tr class="{{ m.alliance }}" data-key="{{ key }}">
+      <td class="l al"><b>{{ m.label }}</b>{% if m.surrogate %} <span class="chip">surrogate</span>{% endif %}{% if m.no_show %} <span class="chip">no-show</span>{% endif %}{% if m.note %} <span class="chip on" title="Our scouts filled this in">📝</span>{% endif %}</td>
+      <td>{% for p in m.partners %}<a href="{{ url_for('team', number=p) }}">{{ p }}</a>{% endfor %}</td>
+      <td class="small">{% for p in m.opponents %}<a href="{{ url_for('team', number=p) }}">{{ p }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      {% if m.has_scores %}
+      <td data-sort="{{ m.score - m.opp_score }}"><span class="res {{ m.result }}">{{ m.result }}</span>{{ m.score }}–{{ m.opp_score }}</td>
+      <td>{{ m.auto }}</td><td>{{ m.teleop }}</td>
+      <td>{{ m.auto_tips }}/{{ m.tips }}</td>
+      <td class="extra">{{ m.hive_elements }}</td><td class="extra">{{ m.garden }}</td>
+      <td class="extra">{{ m.flower_pts }}{% if m.flower_pollen or m.flower_nectar %} <span class="small muted">({{ m.flower_pollen }}P/{{ m.flower_nectar }}N)</span>{% endif %}</td>
+      <td>{{ yn(m.robot_leave) }}</td><td class="extra">{{ m.robot_auto_park }}</td><td>{{ m.robot_park or yn(false) }}</td>
+      <td>{% if m.penalties %}<span class="L">{{ m.penalties }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+      <td class="small extra">{% if m.swarm_rp %}<span class="chip on">S</span>{% endif %}{% if m.pollinator1_rp %}<span class="chip on">P1</span>{% endif %}{% if m.pollinator2_rp %}<span class="chip on">P2</span>{% endif %}</td>
+      {% else %}
+      <td colspan="12" class="muted">{% if m.played %}no score breakdown{% else %}not played yet{% endif %}</td>
+      {% endif %}
+      <td class="vid"><span class="spin"></span></td>
+      <td><button class="small ghost" onclick="toggleScout('{{ key }}')">📝 Scout</button></td>
+    </tr>
+    <tr class="note-row" id="nr-{{ key }}" hidden><td colspan="17">
+      <div class="scout-grid">
+        <div><div class="player-box"></div><div class="cv-box"></div></div>
+        <form class="note-form" onsubmit="return saveNote(event, '{{ key }}')"
+              data-event="{{ m.event }}" data-id="{{ m.id }}" data-label="{{ m.label }}" data-alliance="{{ m.alliance|lower }}">
+          {% set n = m.note or {} %}
+          <div class="ev-head" style="margin-bottom:10px"><b>Scouting {{ number }} in {{ m.label }}</b>
+            <button type="button" class="ghost small" onclick="toggleScout('{{ key }}')">Close ✕</button></div>
+          <div class="form-grid">
+            <label>Auto pollen scored{{ counter('auto_pollen', n.auto_pollen) }}</label>
+            <label>Teleop pollen scored{{ counter('teleop_pollen', n.teleop_pollen) }}</label>
+            <label>Missed shots{{ counter('missed', n.missed) }}</label>
+            <label>Nectar scored{{ counter('nectar', n.nectar) }}</label>
+            <label>Hive tips caused{{ counter('hive_tips', n.hive_tips) }}</label>
+            <label>Mostly scored in
+              <select name="scored_where">{% for o in ['', 'Hive', 'Flower', 'Garden', 'Mixed', "Didn't score"] %}<option {% if n.scored_where == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
+            <label>Endgame
+              <select name="park">{% for o in ['', 'None', 'Partial park', 'Full park'] %}<option {% if n.park == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
+            <label>Driver rating (1-5)
+              <select name="rating">{% for o in ['', 1, 2, 3, 4, 5] %}<option {% if n.rating == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
+            <label class="check"><input type="checkbox" name="defense" {% if n.defense %}checked{% endif %}> Played defense</label>
+            <label class="check"><input type="checkbox" name="broke_down" {% if n.broke_down %}checked{% endif %}> Broke down / stuck</label>
+          </div>
+          <label class="small muted" style="display:block;margin-top:10px;font-weight:600">Notes
+            <textarea name="notes" style="width:100%;min-height:60px;margin-top:4px" placeholder="What stood out? Fast cycles, good defense, tipped over…">{{ n.notes or '' }}</textarea></label>
+          <div class="btn-row" style="margin-top:8px">
+            <input name="scouter" placeholder="Your name" value="{{ n.scouter or (current_user.display_name if current_user else '') }}" style="width:150px">
+            <button>💾 Save</button><span class="saved small muted"></span>
+          </div>
+          <div class="tiny faint" style="margin-top:6px">Tip: press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to save.</div>
+        </form>
+      </div>
+    </td></tr>
+    {% endfor %}
+  </table></div>
+
+  {% if st %}
+  <details style="margin-top:8px">
+    <summary class="small"><b>Detailed OPR breakdown</b> for this event</summary>
+    <div class="table-wrap" style="margin-top:8px"><table>
+      <tr><th class="l"></th><th>Total</th><th>Auto</th><th>Teleop</th><th>Auto hive</th><th>Teleop hive</th><th>Flower</th><th>Garden</th>
+          <th>Leave</th><th>Auto park</th><th>Park</th><th>Tips</th><th>Penalties</th></tr>
+      {% for lbl, g in [('OPR (this robot)', st.opr), ('Average (alliance)', st.avg), ('Best (alliance)', st.max)] %}
+      <tr><td class="l"><b>{{ lbl }}</b></td><td><b>{{ g.totalPointsNp|num }}</b></td><td>{{ g.autoPoints|num }}</td><td>{{ g.dcPoints|num }}</td>
+          <td>{{ g.autoHivePoints|num }}</td><td>{{ g.dcHivePoints|num }}</td><td>{{ g.dcFlowerPoints|num }}</td><td>{{ g.dcGardenPoints|num }}</td>
+          <td>{{ g.autoLeavePointsIndividual|num }}</td><td>{{ g.autoParkPointsIndividual|num }}</td><td>{{ g.dcParkPointsIndividual|num }}</td>
+          <td>{{ g.tips|num }}</td><td>{{ g.penaltyPointsCommitted|num }}</td></tr>
+      {% endfor %}
+    </table></div>
+  </details>
+  {% endif %}
+  <details style="margin-top:6px" data-event-videos="{{ e.code }}">
+    <summary class="small"><b>Video settings</b> for this event: wrong or missing video?</summary>
+    <div class="panel flat">
+      <ul class="vid-list"><li class="muted">Searching…</li></ul>
+      <form onsubmit="return addEventVideo(event, '{{ e.code }}')" class="btn-row" style="margin-top:8px">
+        <input name="url" placeholder="Paste the YouTube livestream link for {{ e.name }}" style="flex:1;min-width:240px">
+        <button class="small">Add stream</button>
+      </form>
+      <p class="small muted" style="margin-bottom:0">Matches open at the wrong moment? Click <b>🔍 Auto-sync</b>, or nudge <b>sync</b> by seconds: positive if the video is too early, negative if it's too late.</p>
+    </div>
+  </details>
+</div>
+{% endfor %}
+</section>
+
+<section id="pit">
+<h2>Robot notes <span class="small muted" style="font-weight:500">pit scouting</span></h2>
 <form class="panel" method="post" action="{{ url_for('team_notes', number=number) }}">
   <div class="pit-grid">
     <label>Drivetrain<input name="drivetrain" value="{{ tn.drivetrain or '' }}" placeholder="mecanum, tank, swerve…"></label>
@@ -79,111 +217,20 @@
     <label>Elements they score
       <select name="elements">{% for o in ['', 'Pollen only', 'Pollen + Nectar', 'Nectar only', 'Neither'] %}
         <option {% if tn.elements == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
-    <label>Auto routine<textarea name="auto_desc">{{ tn.auto_desc or '' }}</textarea></label>
+    <label>Auto routine<textarea name="auto_desc" placeholder="Where they start, what they score">{{ tn.auto_desc or '' }}</textarea></label>
     <label>Strengths<textarea name="strengths">{{ tn.strengths or '' }}</textarea></label>
     <label>Weaknesses<textarea name="weaknesses">{{ tn.weaknesses or '' }}</textarea></label>
     <label>Other notes<textarea name="notes">{{ tn.notes or '' }}</textarea></label>
   </div>
-  <p><button>Save robot notes</button></p>
+  <div class="btn-row" style="margin-top:12px"><button>💾 Save robot notes</button>
+    {% if tn.updated %}<span class="small muted">Last saved {{ tn.updated|int|timestamp }}{% if tn.updated_by %} by {{ tn.updated_by }}{% endif %}</span>{% endif %}</div>
 </form>
+</section>
 
-{% for ev in r.events %}{% set e = ev.event %}{% set st = ev.stats %}
-<h2>{{ e.name }}</h2>
-<div class="ev-head muted small">
-  <span>{{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · {{ e.location.city }}, {{ e.location.state }} · {{ e.code }}</span>
-  {% if st %}<span>Rank <b>#{{ st.rank }}</b> · {{ st.wins }}-{{ st.losses }}-{{ st.ties }} · RP {{ st.rp|num(2) }}</span>{% endif %}
-</div>
-{% if not ev.matches %}
-  <p class="muted">{% if e.finished %}No match data.{% else %}Upcoming / not played yet.{% endif %}</p>
-{% else %}
-{% if st %}
-<div class="table-wrap" style="margin:8px 0"><table>
-  <tr><th class="l"></th><th>Total (np)</th><th>Auto</th><th>Teleop</th><th>Auto hive</th><th>Teleop hive</th><th>Flower</th><th>Garden</th>
-      <th>Leave</th><th>Auto park</th><th>Park</th><th>Tips</th><th>Penalties</th></tr>
-  {% for lbl, g in [('OPR', st.opr), ('Average', st.avg), ('Best', st.max)] %}
-  <tr><td class="l"><b>{{ lbl }}</b></td><td><b>{{ g.totalPointsNp|num }}</b></td><td>{{ g.autoPoints|num }}</td><td>{{ g.dcPoints|num }}</td>
-      <td>{{ g.autoHivePoints|num }}</td><td>{{ g.dcHivePoints|num }}</td><td>{{ g.dcFlowerPoints|num }}</td><td>{{ g.dcGardenPoints|num }}</td>
-      <td>{{ g.autoLeavePointsIndividual|num }}</td><td>{{ g.autoParkPointsIndividual|num }}</td><td>{{ g.dcParkPointsIndividual|num }}</td>
-      <td>{{ g.tips|num }}</td><td>{{ g.penaltyPointsCommitted|num }}</td></tr>
-  {% endfor %}
-</table></div>
-{% endif %}
-<div class="table-wrap"><table>
-  <tr><th class="l">Match</th><th>With</th><th>Against</th><th>Result</th><th>Auto</th><th>Teleop</th>
-      <th title="auto tips / total tips">Tips</th><th title="pollen+nectar in hive">Hive P+N</th><th>Garden</th><th title="flower points (pollen/nectar in flowers)">Flower</th>
-      <th title="this robot">Leave</th><th title="this robot">A.Park</th><th title="this robot">Park</th><th>Pen.</th><th>RP</th><th>Video</th><th></th></tr>
-  {% for m in ev.matches %}{% set key = m.event ~ ':' ~ m.id %}
-  <tr class="{{ m.alliance }}" data-key="{{ key }}">
-    <td class="l al"><b>{{ m.label }}</b>{% if m.surrogate %} <span class="chip">surrogate</span>{% endif %}{% if m.no_show %} <span class="chip">no-show</span>{% endif %}{% if m.note %} <span class="chip on" title="scouted">📝</span>{% endif %}</td>
-    <td>{% for p in m.partners %}<a href="{{ url_for('team', number=p) }}">{{ p }}</a>{% endfor %}</td>
-    <td class="small">{% for p in m.opponents %}<a href="{{ url_for('team', number=p) }}">{{ p }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
-    {% if m.has_scores %}
-    <td><span class="{{ m.result }}">{{ m.result }}</span> {{ m.score }}–{{ m.opp_score }}</td>
-    <td>{{ m.auto }}</td><td>{{ m.teleop }}</td>
-    <td>{{ m.auto_tips }}/{{ m.tips }}</td><td>{{ m.hive_elements }}</td><td>{{ m.garden }}</td>
-    <td>{{ m.flower_pts }}{% if m.flower_pollen or m.flower_nectar %} <span class="small muted">({{ m.flower_pollen }}P/{{ m.flower_nectar }}N)</span>{% endif %}</td>
-    <td>{{ yn(m.robot_leave) }}</td><td>{{ m.robot_auto_park }}</td><td>{{ m.robot_park }}</td>
-    <td>{% if m.penalties %}<span class="L">{{ m.penalties }}</span>{% else %}0{% endif %}</td>
-    <td class="small">{% if m.swarm_rp %}<span class="chip on">S</span>{% endif %}{% if m.pollinator1_rp %}<span class="chip on">P1</span>{% endif %}{% if m.pollinator2_rp %}<span class="chip on">P2</span>{% endif %}</td>
-    {% else %}
-    <td colspan="12" class="muted">{% if m.played %}no score breakdown{% else %}not played yet{% endif %}</td>
-    {% endif %}
-    <td class="vid"><span class="spin"></span></td>
-    <td><button class="small" onclick="toggleScout('{{ key }}')">Scout</button></td>
-  </tr>
-  <tr class="note-row" id="nr-{{ key }}" hidden><td colspan="17">
-    <div class="scout-grid">
-      <div><div class="player-box"></div><div class="cv-box"></div></div>
-      <form class="note-form" onsubmit="return saveNote(event, '{{ key }}')"
-            data-event="{{ m.event }}" data-id="{{ m.id }}" data-label="{{ m.label }}" data-alliance="{{ m.alliance|lower }}">
-        {% set n = m.note or {} %}
-        <div class="form-grid">
-          <label>Auto pollen scored{{ counter('auto_pollen', n.auto_pollen) }}</label>
-          <label>Teleop pollen scored{{ counter('teleop_pollen', n.teleop_pollen) }}</label>
-          <label>Missed shots{{ counter('missed', n.missed) }}</label>
-          <label>Nectar scored{{ counter('nectar', n.nectar) }}</label>
-          <label>Hive tips caused{{ counter('hive_tips', n.hive_tips) }}</label>
-          <label>Mostly scored in
-            <select name="scored_where">{% for o in ['', 'Hive', 'Flower', 'Garden', 'Mixed', "Didn't score"] %}<option {% if n.scored_where == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
-          <label>Endgame
-            <select name="park">{% for o in ['', 'None', 'Partial park', 'Full park'] %}<option {% if n.park == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
-          <label>Driver rating (1-5)
-            <select name="rating">{% for o in ['', 1, 2, 3, 4, 5] %}<option {% if n.rating == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></label>
-          <label class="check"><input type="checkbox" name="defense" {% if n.defense %}checked{% endif %}> Played defense</label>
-          <label class="check"><input type="checkbox" name="broke_down" {% if n.broke_down %}checked{% endif %}> Broke down / stuck</label>
-        </div>
-        <label class="small muted" style="display:block;margin-top:8px">Notes
-          <textarea name="notes" style="width:100%;min-height:50px">{{ n.notes or '' }}</textarea></label>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-          <input name="scouter" placeholder="Scouter name" value="{{ n.scouter or '' }}" style="width:150px">
-          <button>Save</button><span class="saved small muted"></span>
-        </div>
-      </form>
-    </div>
-  </td></tr>
-  {% endfor %}
-</table></div>
-<details class="small" style="margin-top:6px" data-event-videos="{{ e.code }}">
-  <summary>Livestreams used for this event</summary>
-  <div class="panel">
-    <ul class="vid-list"><li class="muted">Searching…</li></ul>
-    <form onsubmit="return addEventVideo(event, '{{ e.code }}')" style="display:flex;gap:6px;flex-wrap:wrap">
-      <input name="url" placeholder="Paste a YouTube livestream link for {{ e.name }}" style="flex:1;min-width:240px">
-      <button class="small">Add stream</button>
-    </form>
-    <p class="muted">If a match opens at the wrong moment, change <b>sync</b> (seconds). Use a positive number if the video is too early, negative if it's too late.</p>
-  </div>
-</details>
-{% endif %}
-{% endfor %}
-
-{% if r.upcoming %}
-<h2>Upcoming events</h2>
-<ul>{% for u in r.upcoming %}<li><b>{{ u.name }}</b> <span class="muted">· {{ u.start }} · {{ u.city }} · {{ u.code }}</span></li>{% endfor %}</ul>
-{% endif %}
-
-<h2>Other team videos on YouTube</h2>
+<section id="videos">
+<h2>Other videos of this team</h2>
 <div class="panel"><ul class="vid-list" id="team-videos"><li class="muted"><span class="spin"></span> Searching YouTube…</li></ul></div>
+</section>
 
 <script>
 const TEAM = {{ number }};
@@ -224,13 +271,13 @@ async function loadVideos(refresh) {
 
 function renderVidCell(key) {
   const td = document.querySelector(`tr[data-key="${key}"] td.vid`), v = VIDEO.matches[key];
-  if (!v) { td.innerHTML = '<span class="muted small">–</span>'; return; }
+  if (!v) { td.innerHTML = '<span class="faint small" title="No livestream found for this match. Open Video settings below the table.">no video</span>'; return; }
   let clip = '';
-  if (v.clip && v.clip.state === 'done') clip = `<a class="btn ghost small" href="${v.clip.url}" target="_blank" title="downloaded clip">💾</a>`;
-  else if (v.clip && (v.clip.state === 'queued' || v.clip.state === 'downloading')) clip = '<span class="spin" title="downloading clip"></span>';
-  else clip = `<button class="ghost small" title="Download this match as a clip (works offline)" onclick="makeClip('${key}')">⬇</button>`;
+  if (v.clip && v.clip.state === 'done') clip = `<a class="btn ghost small" href="${v.clip.url}" target="_blank" title="Play the downloaded clip (works offline)">💾</a>`;
+  else if (v.clip && (v.clip.state === 'queued' || v.clip.state === 'downloading')) clip = '<span class="spin" title="Downloading clip… about 2 minutes"></span>';
+  else clip = `<button class="ghost small" title="Download this match to watch offline" onclick="makeClip('${key}')">⬇</button>`;
   if (v.clip && v.clip.state === 'error') clip += ` <span class="L small" title="${esc(v.clip.error)}">failed</span>`;
-  td.innerHTML = `<a class="btn small" href="${v.url}" target="_blank" title="${esc(v.title)} @ ${fmtT(v.offset)} (${v.method})">▶</a> ${clip}`;
+  td.innerHTML = `<span class="btn-row" style="flex-wrap:nowrap;justify-content:center"><a class="btn small" href="${v.url}" target="_blank" title="${esc(v.title)} @ ${fmtT(v.offset)}">▶ Watch</a>${clip}</span>`;
 }
 
 async function makeClip(key) {
@@ -448,8 +495,28 @@ function toggleScout(key) {
     showPlayer(key); renderCV(key);
     const s = row.querySelector('[name=scouter]');
     if (!s.value) try { s.value = localStorage.getItem('scouter') || ''; } catch (e) {}
+    row.previousElementSibling.scrollIntoView({behavior: 'smooth', block: 'start'});
   } else row.querySelector('.player-box').innerHTML = '';
 }
+
+if (new URLSearchParams(location.search).get('saved')) {
+  toast('Robot notes saved', 'good');
+  history.replaceState(null, '', location.pathname + location.hash);
+}
+
+// Ctrl+Enter saves the scouting form you're typing in
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { const f = e.target.closest?.('form.note-form'); if (f) { e.preventDefault(); f.requestSubmit(); } }
+});
+
+// highlight the section you're looking at in the sticky menu
+(() => {
+  const links = [...document.querySelectorAll('#subnav a')];
+  const obs = new IntersectionObserver(entries => entries.forEach(en => {
+    if (en.isIntersecting) links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id));
+  }), {rootMargin: '-45% 0px -50% 0px'});
+  document.querySelectorAll('main section[id]').forEach(s => obs.observe(s));
+})();
 
 function bump(btn, d) {
   const inp = btn.parentElement.querySelector('input');
@@ -464,6 +531,11 @@ async function saveNote(ev, key) {
   try { localStorage.setItem('scouter', data.scouter || ''); } catch (e) {}
   const r = await post('/api/match-note', data);
   f.querySelector('.saved').textContent = r.ok ? 'Saved ✓' : 'Error saving';
+  if (r.ok) {
+    toast(`Saved scouting for ${f.dataset.label}`, 'good');
+    const cell = document.querySelector(`tr[data-key="${key}"] td.al`);
+    if (cell && !cell.querySelector('.chip.on')) cell.insertAdjacentHTML('beforeend', ' <span class="chip on" title="Our scouts filled this in">📝</span>');
+  } else toast('Couldn\'t save. Is SnackScout still running?', 'bad');
   return false;
 }
 

@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "snackscout", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["app.py"], "port": 5000 }
+    { "name": "snackscout", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["app.py"], "port": 5000 },
+    { "name": "launcher-ui", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["-m", "http.server", "5055", "--bind", "127.0.0.1", "-d", "launcher"], "port": 5055 }
   ]
 }

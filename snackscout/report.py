@@ -119,6 +119,50 @@ def _scouted_summary(notes: list[dict]):
     )
 
 
+def verdict(quick, season, scouted):
+    """Plain-English strengths/weaknesses: [(text, 'good'|'bad'|'')]."""
+    out = []
+    if not season or season.get("n", 0) == 0:
+        return [("No matches played yet this season", "")]
+    if quick and quick.get("count"):
+        pct = quick["tot"]["rank"] / quick["count"]
+        if pct <= 0.05:
+            out.append((f"Elite scorer (top {max(1, round(pct * 100))}% worldwide)", "good"))
+        elif pct <= 0.15:
+            out.append(("Top 15% scorer worldwide", "good"))
+        elif pct <= 0.35:
+            out.append(("Above-average scorer", "good"))
+        elif pct >= 0.7:
+            out.append(("Below-average scorer", "bad"))
+        if quick["auto"]["rank"] / quick["count"] <= 0.15:
+            out.append(("Strong auto", "good"))
+    s = season
+    if s.get("leave_rate") is not None:
+        if s["leave_rate"] >= 90:
+            out.append(("Always leaves in auto", "good"))
+        elif s["leave_rate"] < 60:
+            out.append((f"Misses auto leave ({100 - s['leave_rate']}% of matches)", "bad"))
+    if s.get("park_rate") is not None:
+        if s["park_rate"] >= 90:
+            out.append(("Reliably parks", "good"))
+        elif s["park_rate"] < 65:
+            out.append((f"Often doesn't park ({s['park_rate']}%)", "bad"))
+    if (s.get("auto_tip_rate") or 0) >= 60:
+        out.append(("Alliance tips the hive in auto", "good"))
+    if (s.get("nectar_rate") or 0) >= 40:
+        out.append(("Uses nectar", "good"))
+    if s.get("avg_penalties") is not None:
+        if s["avg_penalties"] >= 10:
+            out.append((f"Penalty-prone ({s['avg_penalties']:.0f} pts/match)", "bad"))
+        elif s["avg_penalties"] <= 2:
+            out.append(("Clean, few penalties", "good"))
+    if scouted and scouted.get("breakdowns", 0) >= 2:
+        out.append((f"Broke down in {scouted['breakdowns']} scouted matches", "bad"))
+    if s.get("n", 0) < 4:
+        out.append((f"Only {s['n']} matches of data", ""))
+    return out
+
+
 def build(number: int, refresh=False):
     t = ftcscout.team(number, refresh=refresh)
     if not t:
@@ -156,10 +200,12 @@ def build(number: int, refresh=False):
     cv = dict(n=len(shots), avg_shots=_avg([s["shots"] for s in shots]),
               avg_auto=_avg([s["auto_shots"] for s in shots]), avg_endgame=_avg([s["endgame_shots"] for s in shots]),
               max_shots=_max([s["shots"] for s in shots])) if shots else None
+    season = _summary(all_rows)
+    scouted = _scouted_summary(note_list)
     return dict(
-        cv=cv,
+        cv=cv, verdict=verdict(t.get("quickStats"), season, scouted),
         team=t, info=ftcevents.team_info(number), events=ordered, upcoming=upcoming,
-        season=_summary(all_rows), latest=with_stats[0] if with_stats else None, best_opr=best_opr,
+        season=season, latest=with_stats[0] if with_stats else None, best_opr=best_opr,
         quick=t.get("quickStats"), team_note=db.team_note(number),
-        scouted=_scouted_summary(note_list),
+        scouted=scouted,
     )

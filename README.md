@@ -10,14 +10,61 @@ Other devices on the same Wi-Fi can open `http://<this-laptop's-IP>:5000`.
 
 Needs Python 3.11+ and ffmpeg on PATH. The other packages (yt-dlp, OpenCV) are installed automatically into `.venv`.
 
-## Share it online (free, from this laptop)
+## Accounts
 
-Double-click **`SnackScout-Online.bat`**. It starts SnackScout plus a free Cloudflare tunnel. In the tunnel window,
-find the `https://....trycloudflare.com` link and share it with the team, along with the `TEAM_PASSWORD` from `.env`.
+- **First time:** open SnackScout on the team laptop (the launcher's **Set up** button) and create the **admin** account.
+  You also choose the **team code** there.
+- **Teammates:** on the login page, click **Create an account** and enter the team code once. Everyone gets their own
+  username and password, and their scouting is signed with their name.
+- **Admins** (Settings → Team) can make other admins, reset someone's password (gives a temporary one), remove people,
+  and change the team code. The team always keeps at least one admin.
 
-- The link only works while the laptop is on and both windows are open.
-- It **changes every time** you start it, so share the new one each time.
-- On this laptop, `http://localhost:5000` works without the password.
+## Team cloud (Supabase, free)
+
+Without the cloud, scouting is saved on the laptop that runs SnackScout. With it, every laptop running SnackScout shares
+the same accounts, notes, robot notes, video settings and shot reviews. Each laptop keeps working offline at venues, and
+changes upload by themselves when it's back online. If two people edit the same thing, the newest edit wins.
+
+One-time setup (about 5 minutes, admin only):
+1. Go to **supabase.com**, sign up (free), and click **New project**. Name it `snackscout` and pick a region near you.
+2. Open **SQL Editor → New query**, paste all of `supabase/schema.sql`, and click **Run**.
+   (Settings → Team cloud has a **Copy the SQL** button.)
+3. Open **Project Settings → API**. Copy the **Project URL** and the **service_role** secret key.
+4. In SnackScout, open **Settings → Team cloud**, paste both values, and click **Test & connect**. Do the same on every
+   other laptop that runs SnackScout.
+
+The key is saved in `.env` on that laptop only. It is never sent to browsers or committed to git.
+The cloud pill at the top of every page shows the status: **Synced**, **N to sync**, **Offline** or **Local only**.
+Free Supabase projects pause after about a week with no activity; click **Restore** in the Supabase dashboard to wake one.
+
+## Settings
+
+Open **⚙️ Settings** from the avatar menu, or press `,`. Settings are saved per person:
+- **Look & feel:** 8 color palettes or your own accent color, Auto / Light / Dark, corner roundness, spacing, text size,
+  and animations (Full / Subtle / Off).
+- **Scouting:** how often the event page auto-refreshes, and whether match tables show all columns.
+- **Account:** your display name and password.
+
+Shortcuts: `/` search · `t` dark/light · `,` settings · `Ctrl+Enter` saves a scouting form.
+
+## The SnackScout launcher (recommended)
+
+Open **SnackScout** from the Desktop or Start menu. To recreate the shortcuts, run
+`powershell -ExecutionPolicy Bypass -File launcher\make_shortcuts.ps1`.
+
+- **🌐 Go online** starts SnackScout and a free Cloudflare tunnel. Your team opens
+  **https://kieran-snack.github.io/scout**. That link never changes, so print its QR code once and tape it in the pit.
+- **Copy invite for team** copies the link and team code, ready to paste in your team chat.
+- **Team code:** show it, copy it, or change it right there. The card above it shows accounts and the team cloud.
+- **Same Wi-Fi link:** works at venues even when the internet is slow.
+- **Keep laptop awake** while online. Keep the lid open and the laptop plugged in.
+- **Closing the launcher** takes SnackScout offline. Visitors then see "SnackScout is offline" instead of an error.
+
+The permanent link is a tiny GitHub Pages site (`kieran-snack/kieran-snack.github.io`). Each time you go online, the launcher
+uses the GitHub CLI (`gh`, logged in as kieran-snack) to point it at the new tunnel. Link shorteners like is.gd refuse
+Cloudflare tunnel links, which is why it works this way.
+
+`SnackScout-Online.bat` still works as a no-frills fallback. It shows a link that changes every time.
 
 ## Competition day
 

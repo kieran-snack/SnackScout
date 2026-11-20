@@ -1,94 +1,188 @@
 {% extends "base.html" %}
 {% block title %}{{ v.event.name if v.event else v.code }} · SnackScout{% endblock %}
 {% macro team_link(p, show_opr=True) -%}
-  <a href="{{ url_for('team', number=p.number) }}"><b>{{ p.number }}</b></a> <span class="small">{{ p.name }}</span>
-  {%- if show_opr %} <span class="chip" title="season OPR">{{ p.opr|num if p.opr is not none else 'no data' }}</span>{% endif %}
+  <a href="{{ url_for('team', number=p.number) }}" title="{{ p.name }}"><b>{{ p.number }}</b> <span class="small" style="color:var(--ink)">{{ p.name|truncate(22, True, '…') }}</span></a>
+  {%- if show_opr %} <span class="chip" title="Season OPR (points this robot adds per match)">{{ p.opr|num if p.opr is not none else 'new' }}</span>{% endif %}
 {%- endmacro %}
 {% block body %}
 {% set e = v.event %}
-<div class="ev-head">
+{% set live = e and (e.start <= today <= e.end) %}
+{% set ally = [] %}{% set foe = [] %}
+{% for m in v.matches %}{% for p in m.partners %}{% set _ = ally.append(p.number) %}{% endfor %}{% for p in m.opponents %}{% set _ = foe.append(p.number) %}{% endfor %}{% endfor %}
+
+<div class="hero">
   <div>
+    <div class="num">{% if live %}<span class="live-dot"></span>HAPPENING TODAY{% elif e and e.end < today %}FINISHED{% else %}COMPETITION{% endif %}</div>
     <h1>{{ e.name if e else v.code }}</h1>
-    {% if e %}<div class="muted">{{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · {{ e.location.venue or '' }} {{ e.location.city }}, {{ e.location.state }} · {{ v.code }}</div>{% endif %}
-    <div class="small" style="margin-top:4px">
-      <a href="https://ftc-events.firstinspires.org/{{ e.start[:4] if e else '' }}/{{ v.code }}" target="_blank">FTC Events</a> ·
-      <a href="https://ftcscout.org/events/{{ e.start[:4] if e else '' }}/{{ v.code }}" target="_blank">FTCScout</a>
-      {% if e and e.liveStreamURL %} · <a href="{{ e.liveStreamURL }}" target="_blank">Livestream</a>{% endif %}
+    {% if e %}<div class="meta">📅 {{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · 📍 {{ e.location.venue or '' }} {{ e.location.city }}, {{ e.location.state }} · {{ v.code }}</div>{% endif %}
+    <div class="links">
+      <a href="https://ftc-events.firstinspires.org/{{ e.start[:4] if e else '' }}/{{ v.code }}" target="_blank" rel="noopener">FTC Events ↗</a>
+      <a href="https://ftcscout.org/events/{{ e.start[:4] if e else '' }}/{{ v.code }}" target="_blank" rel="noopener">FTCScout ↗</a>
+      {% if e and e.liveStreamURL %}<a href="{{ e.liveStreamURL }}" target="_blank" rel="noopener">📺 Livestream ↗</a>{% endif %}
     </div>
   </div>
-  <div>
-    <form style="display:flex;gap:6px">
-      <input name="team" value="{{ our }}" style="width:90px" title="Scouting for team">
-      <button class="ghost">Show</button>
-      <a class="btn ghost" href="?team={{ our }}&refresh=1">↻ Refresh</a>
+  <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+    <form class="btn-row" data-loading="Loading schedule…">
+      <label class="small muted" for="team-in">Scouting for</label>
+      <input id="team-in" name="team" value="{{ our }}" style="width:90px" inputmode="numeric">
+      <button class="ghost small">Show</button>
     </form>
+    <div class="btn-row small muted">
+      <span id="updated">Updated just now</span>
+      {% if (live or not v.schedule_out) and (prefs.autorefresh is not defined or prefs.autorefresh != 0 or not v.schedule_out) %}<label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="auto-ref" checked> auto-refresh</label>{% endif %}
+      <a class="btn ghost small" href="?team={{ our }}&refresh=1">↻ Refresh</a>
+    </div>
   </div>
 </div>
 
 {% if not v.schedule_out %}
-  <div class="banner" style="margin-top:12px">The match schedule isn't posted yet. This page checks again every 2 minutes.
+  <div class="banner">⏳ <b>The match schedule isn't posted yet.</b> This page checks again every 2 minutes.
     Meanwhile, scout the teams below: they're your possible partners and opponents.</div>
 {% elif not v.matches %}
-  <div class="banner" style="margin-top:12px">The schedule is out ({{ v.n_matches }} matches), but team {{ our }} isn't in it.</div>
+  <div class="banner">The schedule is out ({{ v.n_matches }} matches), but team {{ our }} isn't in it. Check the team number above.</div>
+{% endif %}
+
+{% if v.next %}{% set m = v.next %}
+<div class="next-hero">
+  <div>
+    <div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.6px">Next match</div>
+    <div style="font-size:22px;font-weight:800">{{ m.description }}</div>
+    <span class="chip {{ m.alliance|lower }}">{{ m.alliance }} alliance</span>
+    {% if m.time %}<div class="countdown" data-start="{{ m.time }}">--:--</div>
+    <div class="small muted">scheduled {{ m.time[11:16] }}{% if m.field %} · field {{ m.field }}{% endif %}</div>{% endif %}
+  </div>
+  <div>
+    <div class="small muted">WITH</div>
+    <div>{% for p in m.partners %}{{ team_link(p) }}{% else %}–{% endfor %}</div>
+    <div class="small muted" style="margin-top:6px">AGAINST</div>
+    <div>{% for p in m.opponents %}{{ team_link(p) }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+    {% if m.tips %}<ul class="tips">{% for t in m.tips[:3] %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  <div style="text-align:center;min-width:150px">
+    <span class="diff {{ m.diff_class }}">{{ m.difficulty }}</span>
+    <div style="font-size:24px;font-weight:800;margin-top:6px">{{ m.pred_us }}–{{ m.pred_them }}</div>
+    <div class="small muted">predicted · {{ m.p_win }}% win</div>
+    <div class="winbar"><i style="width:{{ m.p_win }}%"></i></div>
+  </div>
+</div>
 {% endif %}
 
 {% if v.matches %}
-<h2>Our matches · {{ our }}{% if v.our_profile %} {{ v.our_profile.name }}{% endif %}</h2>
 {% set wins = v.matches|selectattr('played')|selectattr('played.result', 'equalto', 'W')|list|length %}
 {% set played = v.matches|selectattr('played')|list|length %}
-<p class="muted small">{{ v.matches|length }} matches · {{ played }} played ({{ wins }} won) ·
-  Predictions add up each robot's season OPR. Unknown teams count as {{ v.fallback|round|int }}.</p>
-<div class="match-cards">
+<h2>Our matches <span class="count">{{ v.matches|length }}</span>
+  {% if played %}<span class="small muted" style="font-weight:500">{{ wins }}-{{ played - wins }} so far</span>{% endif %}</h2>
+<div class="table-tools">
+  <div class="btn-row" id="mfilter">
+    <button class="small" data-f="upcoming">Upcoming</button>
+    <button class="small ghost" data-f="played">Played</button>
+    <button class="small ghost" data-f="all">All</button>
+  </div>
+  <div class="small muted">Predictions add up each robot's season OPR {{ "" }}<span class="tip" tabindex="0" data-tip="OPR = points a robot adds per match. Teams with no data yet count as {{ v.fallback|round|int }}.">?</span></div>
+</div>
+<div class="match-cards" id="mcards">
 {% for m in v.matches %}
-  <div class="mcard {{ m.alliance|lower }} {% if v.next and m.description == v.next.description %}next{% endif %} {% if m.played %}done{% endif %}">
+  <div class="mcard {{ m.alliance|lower }} {% if v.next and m.description == v.next.description %}next{% endif %} {% if m.played %}done{% endif %}" data-played="{{ 1 if m.played else 0 }}">
     <div class="mhead">
-      <div><b>{{ m.description }}</b> <span class="chip" style="background:var(--{{ m.alliance|lower }}-bg)">{{ m.alliance }}</span>
+      <div><b>{{ m.description }}</b> <span class="chip {{ m.alliance|lower }}">{{ m.alliance }}</span>
         {% if v.next and m.description == v.next.description %}<span class="chip on">NEXT</span>{% endif %}</div>
       <div class="small muted">{{ m.time[11:16] if m.time else '' }}{% if m.field %} · field {{ m.field }}{% endif %}</div>
     </div>
     <div class="mbody">
-      <div><span class="muted small">WITH</span><br>{% for p in m.partners %}{{ team_link(p) }}{% else %}–{% endfor %}</div>
-      <div><span class="muted small">AGAINST</span><br>{% for p in m.opponents %}{{ team_link(p) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+      <div class="who"><span class="muted tiny" style="font-weight:700">WITH</span>{% for p in m.partners %}{{ team_link(p) }}{% else %}<div>–</div>{% endfor %}</div>
+      <div class="who"><span class="muted tiny" style="font-weight:700">AGAINST</span>{% for p in m.opponents %}<div>{{ team_link(p) }}</div>{% endfor %}</div>
       <div class="pred">
         {% if m.played %}
-          <span class="{{ m.played.result }}" style="font-size:22px">{{ m.played.result }} {{ m.played.us }}–{{ m.played.them }}</span>
-          <div class="small muted">predicted {{ m.pred_us }}–{{ m.pred_them }}</div>
+          <span class="res {{ m.played.result }}" style="font-size:16px">{{ m.played.result }}</span>
+          <div style="font-size:20px;font-weight:800">{{ m.played.us }}–{{ m.played.them }}</div>
+          <div class="tiny muted">predicted {{ m.pred_us }}–{{ m.pred_them }}</div>
         {% else %}
           <span class="diff {{ m.diff_class }}">{{ m.difficulty }}</span>
-          <div class="small">predicted <b>{{ m.pred_us }}–{{ m.pred_them }}</b> · {{ m.p_win }}% win</div>
+          <div class="small" style="margin-top:4px"><b>{{ m.pred_us }}–{{ m.pred_them }}</b></div>
+          <div class="tiny muted">{{ m.p_win }}% win chance</div>
+          <div class="winbar"><i style="width:{{ m.p_win }}%"></i></div>
         {% endif %}
       </div>
     </div>
     {% if m.tips %}
     <details {% if (v.next and m.description == v.next.description) %}open{% endif %}>
-      <summary class="small"><b>Strategy</b> ({{ m.tips|length }})</summary>
+      <summary class="small"><b>💡 Strategy</b> <span class="muted">({{ m.tips|length }} tips)</span></summary>
       <ul class="tips">{% for t in m.tips %}<li>{{ t }}</li>{% endfor %}</ul>
     </details>
     {% endif %}
-    <div class="small"><a href="{{ url_for('compare', teams=([our] + m.partners|map(attribute='number')|list + m.opponents|map(attribute='number')|list)|join(',')) }}">Compare all 4 →</a></div>
+    <div class="small"><a href="{{ url_for('compare', teams=([our] + m.partners|map(attribute='number')|list + m.opponents|map(attribute='number')|list)|join(',')) }}">⚖️ Compare all 4 →</a></div>
   </div>
 {% endfor %}
 </div>
 {% endif %}
 
-<h2>Teams at this event ({{ v.teams|length }})</h2>
-<div class="table-wrap"><table>
-  <tr><th>Rank</th><th class="l">Team</th><th>Season OPR</th><th>Auto</th><th>Teleop</th><th>Record</th>
-      <th title="robot left start zone in auto">Leave</th><th title="robot parked at end">Park</th><th title="alliance hive tips per match">Tips</th>
-      <th title="penalty points given per match">Pen.</th><th>Scouted</th></tr>
+<h2>Teams at this event <span class="count">{{ v.teams|length }}</span></h2>
+<div class="table-tools">
+  <input type="search" data-filter="teams-table" placeholder="Filter teams…" aria-label="Filter teams">
+  <div class="small muted">Click a column header to sort · <span class="chip blue">with us</span> <span class="chip red">against us</span></div>
+</div>
+<div class="table-wrap"><table id="teams-table" data-sortable>
+  <tr><th title="Current rank at this event">Rank</th><th class="l">Team</th><th title="Season OPR: points this robot adds per match">OPR</th><th>Auto</th><th>Teleop</th><th>Record</th>
+      <th title="This robot leaves its start zone in auto">Leave</th><th title="This robot parks at the end">Park</th><th title="Alliance hive tips per match">Tips</th>
+      <th title="Penalty points given per match">Pen.</th><th class="l">Us</th><th class="l">Scouted</th></tr>
   {% for p in v.teams %}
-  <tr {% if p.number == our %}style="background:var(--chip)"{% endif %}>
+  <tr {% if p.number == our %}style="background:var(--brand-soft)"{% endif %}>
     <td>{{ p.live.rank if p.live and p.live.rank else '' }}</td>
-    <td class="l">{{ team_link(p, False) }}</td>
-    <td><b>{{ p.opr|num if p.opr is not none else '–' }}</b>{% if p.world_rank %} <span class="small muted">#{{ p.world_rank }}</span>{% endif %}</td>
+    <td class="l" data-sort="{{ p.number }}">{{ team_link(p, False) }}</td>
+    <td data-sort="{{ p.opr if p.opr is not none else '' }}"><b>{{ p.opr|num if p.opr is not none else '–' }}</b>{% if p.world_rank %} <span class="tiny muted">#{{ p.world_rank }}</span>{% endif %}</td>
     <td>{{ p.auto|num }}</td><td>{{ p.dc|num }}</td><td>{{ p.record or '–' }}</td>
     <td>{{ p.leave_rate|pct }}</td><td>{{ p.park_rate|pct }}</td><td>{{ p.avg_tips|num }}</td><td>{{ p.avg_penalties|num }}</td>
-    <td class="small">{% if p.scouted_n %}{{ p.scouted_n }} notes{% endif %}{% if p.cv_shots is not none %} · {{ p.cv_shots }} shots{% endif %}</td>
+    <td class="l">{% if p.number == our %}<span class="chip on">us</span>{% endif %}{% if p.number in ally %}<span class="chip blue">with ×{{ ally|select('equalto', p.number)|list|length }}</span>{% endif %}{% if p.number in foe %}<span class="chip red">vs ×{{ foe|select('equalto', p.number)|list|length }}</span>{% endif %}</td>
+    <td class="l small">{% if p.scouted_n %}📝 {{ p.scouted_n }}{% endif %}{% if p.cv_shots is not none %} · 🔬 {{ p.cv_shots }}{% endif %}</td>
   </tr>
   {% endfor %}
 </table></div>
+{% endblock %}
 
-{% if e and (e.start <= today <= e.end) or not v.schedule_out %}
-<script>setTimeout(() => location.reload(), {{ 120000 if not v.schedule_out else 90000 }});</script>
-{% endif %}
+{% block scripts %}
+<script>
+// match card filter
+(() => {
+  const btns = [...document.querySelectorAll('#mfilter [data-f]')];
+  const apply = f => {
+    btns.forEach(b => b.classList.toggle('ghost', b.dataset.f !== f));
+    document.querySelectorAll('#mcards .mcard').forEach(c => c.hidden = f === 'upcoming' ? c.dataset.played === '1' : f === 'played' ? c.dataset.played === '0' : false);
+    SS.store.set('mfilter', f);
+  };
+  btns.forEach(b => b.onclick = () => apply(b.dataset.f));
+  if (btns.length) {
+    const anyUpcoming = document.querySelector('#mcards .mcard[data-played="0"]');
+    apply(SS.store.get('mfilter', anyUpcoming ? 'upcoming' : 'all'));
+  }
+})();
+
+// countdown to next match (schedule times are the event's local time = this laptop's time at the venue)
+(() => {
+  const el = document.querySelector('.countdown'); if (!el) return;
+  const t = new Date(el.dataset.start);
+  const tick = () => {
+    const s = Math.round((t - Date.now()) / 1000);
+    if (s <= 0) { el.textContent = s > -300 ? 'Now!' : 'Running late'; return; }
+    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    el.textContent = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  };
+  tick(); setInterval(tick, 1000);
+})();
+
+// auto-refresh that keeps your place on the page
+(() => {
+  const key = 'ss.scroll.' + location.pathname;
+  try { const y = sessionStorage.getItem(key); if (y) { scrollTo(0, +y); sessionStorage.removeItem(key); } } catch (e) {}
+  const loaded = Date.now();
+  setInterval(() => { const u = document.getElementById('updated'); if (u) u.textContent = 'Updated ' + SS.ago(loaded); }, 5000);
+  const box = document.getElementById('auto-ref'); if (!box) return;
+  box.checked = SS.store.get('autoref', true);
+  box.onchange = () => SS.store.set('autoref', box.checked);
+  setInterval(() => {
+    if (!box.checked || document.querySelector('input:focus, textarea:focus') || document.hidden) return;
+    try { sessionStorage.setItem(key, scrollY); } catch (e) {}
+    location.reload();
+  }, {{ 120000 if not v.schedule_out else ((prefs.autorefresh or 90) * 1000) }});
+})();
+</script>
 {% endblock %}

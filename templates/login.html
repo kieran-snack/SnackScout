@@ -1,14 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Log in · SnackScout{% endblock %}
 {% block body %}
-<div class="panel" style="max-width:380px;margin:60px auto;text-align:center">
-  <div style="font-size:48px">🍿</div>
-  <h1>SnackScout</h1>
-  <p class="muted">Team Snack Time only. Enter the team password.</p>
-  <form method="post" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
-    <input type="password" name="password" autofocus autocomplete="current-password" placeholder="Team password" style="font-size:18px">
-    <button style="font-size:18px">Log in</button>
+<div class="panel auth reveal">
+  <div class="auth-mark">🍿</div>
+  <h1>Welcome back</h1>
+  <p class="muted">Log in to Team Snack Time's scouting.</p>
+  <form method="post" class="auth-form" data-loading="Logging in…">
+    <label>Username<input name="username" autofocus autocomplete="username" required></label>
+    <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+    {% if error %}<div class="form-err">{{ error }}</div>{% endif %}
+    <button class="wide">Log in</button>
   </form>
-  {% if error %}<p class="L">{{ error }}</p>{% endif %}
+  <p class="small muted" style="margin-bottom:0">New to the team? <a href="{{ url_for('signup', next=request.args.get('next')) }}">Create an account</a> with the team code.</p>
 </div>
 {% endblock %}

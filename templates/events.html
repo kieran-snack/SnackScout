@@ -1,38 +1,56 @@
 {% extends "base.html" %}
 {% block title %}Competitions · SnackScout{% endblock %}
+{% macro when(d) -%}
+  <div class="when"><b>{{ d[8:10]|int }}</b><span>{{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d[5:7]|int] }}</span></div>
+{%- endmacro %}
 {% block body %}
-<h2>Pick your competition</h2>
+<h1>🏆 Competitions</h1>
+<p class="muted" style="margin-top:6px">Pick the event you're at to see the schedule, who you're with, predictions and strategy.</p>
+
 {% if ours %}
-<h3>Snack Time ({{ our_team }}) events this season</h3>
+<h2>Snack Time ({{ our_team }}) this season <span class="count">{{ ours|length }}</span></h2>
 <div class="ev-list">
-  {% for e in ours %}
-  <a class="ev-item {% if e.start <= today <= e.end %}now{% elif e.end < today %}past{% endif %}" href="{{ url_for('event', code=e.code) }}">
-    <b>{{ e.name }}</b>
-    <span class="small muted">{{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · {{ e.location.city }}, {{ e.location.state }}</span>
-    {% if e.start <= today <= e.end %}<span class="chip on">TODAY</span>{% elif e.start > today %}<span class="chip">upcoming</span>{% endif %}
+  {% for e in ours %}{% set now = e.start <= today <= e.end %}
+  <a class="ev-item {% if now %}now{% elif e.end < today %}past{% endif %}" href="{{ url_for('event', code=e.code) }}">
+    {{ when(e.start) }}
+    <div class="grow"><div class="name">{{ e.name }}</div>
+      <div class="small muted">{{ e.location.city }}, {{ e.location.state }}{% if e.end != e.start %} · {{ e.start[5:] }} – {{ e.end[5:] }}{% endif %} · {{ e.code }}</div></div>
+    {% if now %}<span class="chip on"><span class="live-dot"></span>TODAY</span>
+    {% elif e.start > today %}<span class="chip">upcoming</span>
+    {% else %}<span class="chip">results</span>{% endif %}
+    <span class="small">Open →</span>
   </a>
   {% endfor %}
 </div>
 {% endif %}
 
-<h3>All competitions on a day</h3>
-<form style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-  <input type="date" name="date" value="{{ day }}" onchange="this.form.submit()">
-  <a class="btn ghost small" href="?date={{ today }}">Today</a>
-  <input id="filter" placeholder="Filter by name, city, state…" oninput="filterEv(this.value)" style="flex:1;min-width:200px">
+<h2>All events on a day</h2>
+<form class="table-tools" style="justify-content:flex-start" data-loading="Loading events…">
+  <a class="btn ghost small" href="?date={{ prev_day }}" title="Previous day">←</a>
+  <input type="date" name="date" value="{{ day }}" onchange="this.form.requestSubmit()">
+  <a class="btn ghost small" href="?date={{ next_day }}" title="Next day">→</a>
+  {% if day != today %}<a class="btn ghost small" href="?date={{ today }}">Today</a>{% endif %}
+  <input type="search" id="filter" placeholder="Filter by name, city, state…" oninput="filterEv(this.value)" style="flex:1;min-width:200px" aria-label="Filter events">
 </form>
 <div class="ev-list" id="day-list" style="margin-top:8px">
   {% for e in todays %}
   <a class="ev-item" href="{{ url_for('event', code=e.code) }}" data-q="{{ (e.name ~ ' ' ~ e.location.city ~ ' ' ~ e.location.state ~ ' ' ~ e.location.country ~ ' ' ~ e.code)|lower }}">
-    <b>{{ e.name }}</b>
-    <span class="small muted">{{ e.location.city }}, {{ e.location.state }}, {{ e.location.country }} · {{ e.code }}</span>
-    {% if e.code in our_codes %}<span class="chip on">we're registered</span>{% endif %}
-    {% if e.ongoing %}<span class="chip">in progress</span>{% elif e.finished %}<span class="chip">finished</span>{% endif %}
+    {{ when(e.start) }}
+    <div class="grow"><div class="name">{{ e.name }}</div>
+      <div class="small muted">{{ e.location.city }}, {{ e.location.state }}{% if e.location.country != 'USA' %}, {{ e.location.country }}{% endif %} · {{ e.code }}</div></div>
+    {% if e.code in our_codes %}<span class="chip on">⭐ we're registered</span>{% endif %}
+    {% if e.ongoing %}<span class="chip"><span class="live-dot"></span>in progress</span>{% elif e.finished %}<span class="chip">finished</span>{% endif %}
   </a>
-  {% else %}<p class="muted">No FTC events on {{ day }}.</p>{% endfor %}
+  {% else %}<div class="empty">No FTC events on {{ day }}.</div>{% endfor %}
+  <div class="empty hide" id="no-match">No events match that filter.</div>
 </div>
+{% endblock %}
+{% block scripts %}
 <script>
-function filterEv(q) { q = q.toLowerCase();
-  document.querySelectorAll('#day-list .ev-item').forEach(a => a.hidden = q && !a.dataset.q.includes(q)); }
+function filterEv(q) {
+  q = q.toLowerCase().trim(); let shown = 0;
+  document.querySelectorAll('#day-list .ev-item').forEach(a => { a.hidden = q && !a.dataset.q.includes(q); if (!a.hidden) shown++; });
+  document.getElementById('no-match').classList.toggle('hide', shown > 0 || !q);
+}
 </script>
 {% endblock %}
