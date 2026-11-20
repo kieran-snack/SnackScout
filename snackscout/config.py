@@ -18,6 +18,9 @@ YTDLP_EXTRA = {"cookiefile": os.getenv("YTDLP_COOKIES")} if os.getenv("YTDLP_COO
 
 # Web hosting: when TEAM_PASSWORD is set, every page needs the password first.
 TEAM_PASSWORD = os.getenv("TEAM_PASSWORD", "")
+# On the team laptop, people using it directly (http://localhost) skip the password; visitors through the
+# tunnel or Wi-Fi still need it. Set to 0 on a real server.
+LOCAL_NO_PASSWORD = os.getenv("LOCAL_NO_PASSWORD", "1") == "1"
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "5000"))
 

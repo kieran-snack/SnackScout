@@ -10,6 +10,15 @@ Other devices on the same Wi-Fi can open `http://<this-laptop's-IP>:5000`.
 
 Needs Python 3.11+ and ffmpeg on PATH. The other packages (yt-dlp, OpenCV) are installed automatically into `.venv`.
 
+## Share it online (free, from this laptop)
+
+Double-click **`SnackScout-Online.bat`**. It starts SnackScout plus a free Cloudflare tunnel. In the tunnel window,
+find the `https://....trycloudflare.com` link and share it with the team, along with the `TEAM_PASSWORD` from `.env`.
+
+- The link only works while the laptop is on and both windows are open.
+- It **changes every time** you start it, so share the new one each time.
+- On this laptop, `http://localhost:5000` works without the password.
+
 ## Competition day
 
 1. Click **Competitions** and pick today's event. Our events are listed first.

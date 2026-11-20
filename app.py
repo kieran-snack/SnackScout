@@ -11,8 +11,8 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
                    session, url_for)
 
 from snackscout import analysis, autosync, clips, db, ftcscout, report, strategy, video
-from snackscout.config import (ANALYSIS_DIR, CLIPS_DIR, HOST, OUR_TEAM, PORT, SEASON, TEAM_PASSWORD,
-                               secret_key)
+from snackscout.config import (ANALYSIS_DIR, CLIPS_DIR, HOST, LOCAL_NO_PASSWORD, OUR_TEAM, PORT, SEASON,
+                               TEAM_PASSWORD, secret_key)
 from snackscout.ftcscout import ApiError
 
 app = Flask(__name__)
@@ -34,9 +34,17 @@ def check(pattern, value):
 
 # ---------------- team password ----------------
 
+def is_local_user():
+    """Someone sitting at this laptop (not via the Cloudflare tunnel, a proxy, or the Wi-Fi)."""
+    if not LOCAL_NO_PASSWORD:
+        return False
+    proxied = request.headers.get("Cf-Connecting-Ip") or request.headers.get("X-Forwarded-For")
+    return request.remote_addr in ("127.0.0.1", "::1") and not proxied
+
+
 @app.before_request
 def require_login():
-    if not TEAM_PASSWORD or session.get("ok"):
+    if not TEAM_PASSWORD or session.get("ok") or is_local_user():
         return None
     if request.endpoint in ("login", "static"):
         return None
