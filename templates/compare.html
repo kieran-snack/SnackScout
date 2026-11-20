@@ -46,6 +46,12 @@
   {%- endif -%}
 {%- endmacro %}
 {% set nums_list = reports|map(attribute=0)|list %}
+<div class="chart-grid" style="margin-top:6px">
+  <div class="chart-box"><h3>Points they add</h3>
+    <div class="chart-sub">Season OPR split into auto and the rest of the match. Click a bar to open that team.</div><div id="ch-cmp-opr"></div></div>
+  <div class="chart-box"><h3>How reliable they are</h3>
+    <div class="chart-sub">Share of matches where this robot left in auto and parked at the end, and how often their alliance got the Swarm RP.</div><div id="ch-cmp-rel"></div></div>
+</div>
 <div class="table-wrap compare" style="margin-top:14px"><table>
   <tr><th class="l" style="min-width:190px"></th>{% for n, r in reports %}
     <th style="min-width:160px;white-space:normal;text-transform:none;letter-spacing:0">
@@ -72,4 +78,30 @@
 {% else %}
   <div class="empty" style="margin-top:16px">None of those teams were found.</div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const C = window.SSChart; if (!C) return;
+  const T = [{% for n, r in reports if r %}{% set q = r.quick %}{% set se = r.season or {} %}
+    {n: {{ n }}, name: {{ r.team.name|tojson }}, opr: {{ (q.tot.value if q else none)|tojson }}, auto: {{ (q.auto.value if q else none)|tojson }}, dc: {{ (q.dc.value if q else none)|tojson }},
+     leave: {{ se.leave_rate|tojson }}, park: {{ se.park_rate|tojson }}, swarm: {{ se.swarm_rate|tojson }}},{% endfor %}];
+  const us = Number(document.body.dataset.ourTeam);
+  const withOpr = T.filter(t => t.opr != null);
+  if (withOpr.length) C.hbars(document.getElementById('ch-cmp-opr'), {
+    title: 'Season OPR', labels: withOpr.map(t => String(t.n)), highlight: withOpr.map(t => t.n === us),
+    series: [{name: 'Auto', values: withOpr.map(t => t.auto)}, {name: 'Teleop and endgame', values: withOpr.map(t => Math.max(0, t.opr - (t.auto || 0)))}],
+    tooltip: i => { const t = withOpr[i]; return C.tipHtml(`${t.n} ${t.name}`, [[null, 'OPR', C.fmt(t.opr)], [1, 'Auto', C.fmt(t.auto)], [2, 'Teleop and endgame', C.fmt(t.opr - (t.auto || 0))]]); },
+    onClick: i => location.href = '/team/' + withOpr[i].n,
+  });
+  const pct = v => v == null ? '–' : Math.round(v) + '%';
+  const withS = T.filter(t => t.leave != null);
+  if (withS.length) C.columns(document.getElementById('ch-cmp-rel'), {
+    title: 'Reliability', labels: withS.map(t => String(t.n)), minMax: 100, maxBar: 66, height: 200,
+    series: [{name: 'Leaves in auto', values: withS.map(t => t.leave)}, {name: 'Parks at the end', values: withS.map(t => t.park)},
+             {name: 'Swarm RP', values: withS.map(t => t.swarm)}],
+    tooltip: i => { const t = withS[i]; return C.tipHtml(`${t.n} ${t.name}`, [[1, 'Leaves in auto', pct(t.leave)], [2, 'Parks at the end', pct(t.park)], [3, 'Swarm RP', pct(t.swarm)]]); },
+  });
+})();
+</script>
 {% endblock %}

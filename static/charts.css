@@ -1,0 +1,48 @@
+/* SnackScout charts. Series colors are a fixed, colorblind-checked order (blue, orange, aqua);
+   dark mode uses its own steps of the same hues. */
+.chart-box { --cs1: #2a78d6; --cs2: #eb6834; --cs3: #1baf7a;
+  --c-grid: #e1e0d9; --c-base: #c3c2b7; --c-tick: #898781; --c-ink: #0b0b0b; --c-ink2: #52514e; --c-surface: #fcfcfb; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .chart-box { --cs1: #3987e5; --cs2: #d95926; --cs3: #199e70;
+    --c-grid: #2c2c2a; --c-base: #383835; --c-ink: #f0efec; --c-ink2: #c3c2b7; --c-surface: #1a1a19; }
+}
+:root[data-theme="dark"] .chart-box { --cs1: #3987e5; --cs2: #d95926; --cs3: #199e70;
+  --c-grid: #2c2c2a; --c-base: #383835; --c-ink: #f0efec; --c-ink2: #c3c2b7; --c-surface: #1a1a19; }
+
+.chart-box { background: var(--c-surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px 10px; margin: 12px 0;
+  box-shadow: var(--shadow); color: var(--c-ink); }
+.chart-box h3 { margin: 0; font-size: 15px; color: var(--c-ink); }
+.chart-box .chart-sub { font-size: 12.5px; color: var(--c-ink2); margin: 2px 0 6px; }
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 0 14px; }
+.chart { position: relative; width: 100%; min-height: 40px; }
+.chart svg { display: block; overflow: visible; font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--c-ink2); margin: 2px 0 8px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.sw.cs1 { background: var(--cs1); } .sw.cs2 { background: var(--cs2); } .sw.cs3 { background: var(--cs3); } .sw.none { background: transparent; }
+
+.chart .cs1 { fill: var(--cs1); } .chart .cs2 { fill: var(--cs2); } .chart .cs3 { fill: var(--cs3); }
+.chart .c-grid { stroke: var(--c-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .c-base { stroke: var(--c-base); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .c-tick { fill: var(--c-tick); font-variant-numeric: tabular-nums; }
+.chart .c-label { fill: var(--c-ink2); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.chart .c-val { fill: var(--c-ink2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .c-us .c-label, .chart .c-us .c-val { fill: var(--c-ink); font-weight: 800; }
+.chart .c-band { fill: color-mix(in srgb, var(--accent, #f5b942) 16%, transparent); }
+.chart .c-hit { fill: transparent; }
+.chart .c-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .cl1 { stroke: var(--cs1); } .chart .cl2 { stroke: var(--cs2); } .chart .cl3 { stroke: var(--cs3); }
+.chart .c-dot { stroke: var(--c-surface); stroke-width: 2; }
+.chart .c-cross { stroke: var(--c-base); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .c-mark { stroke: var(--c-ink); stroke-width: 1.5; }
+.chart svg .c-col { transition: opacity .15s; }
+.chart svg.hovering .c-col:not(.on) { opacity: .45; }
+
+.chart-tip { position: absolute; z-index: 300; pointer-events: none; min-width: 150px; max-width: 280px; padding: 8px 10px; border-radius: 10px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line2); box-shadow: var(--shadow-lg); font-size: 12.5px; line-height: 1.45; }
+.chart-tip > b { display: block; margin-bottom: 3px; }
+.chart-tip .tr { display: flex; align-items: center; gap: 7px; }
+.chart-tip .tr span { flex: 1; color: var(--muted); }
+.chart-tip .tr b { font-variant-numeric: tabular-nums; }
+.chart-tip .note { color: var(--muted); margin-top: 3px; }
+@media (prefers-reduced-motion: reduce) { .chart svg .c-col { transition: none; } }

@@ -151,6 +151,13 @@
   </div>
 {% endfor %}
 </div>
+{% if played %}
+<div class="chart-box">
+  <h3>Our scores here</h3>
+  <div class="chart-sub">Our alliance next to the other alliance in every match we've played. Hover a match for details.</div>
+  <div id="ch-ours"></div>
+</div>
+{% endif %}
 {% elif v.schedule_out %}
 <div class="empty">{{ our or 'This team' }} has no matches here. See <a href="#all">all matches</a>.</div>
 {% else %}
@@ -170,6 +177,13 @@
   </div>
   <input type="search" id="afind" placeholder="Find a team number…" inputmode="numeric" aria-label="Find a team">
 </div>
+{% if v.matches_all|selectattr('played')|list %}
+<div class="chart-box">
+  <h3>Score spread</h3>
+  <div class="chart-sub">How many alliances scored in each range at this event, with our scores in their own color.</div>
+  <div id="ch-spread"></div>
+</div>
+{% endif %}
 <div class="table-wrap"><table id="all-table" class="all-matches">
   <thead><tr><th class="l">Match</th><th>Time</th><th class="l">Red</th><th class="l">Blue</th><th>Score / prediction</th><th class="l">What to watch</th><th data-nosort></th></tr></thead>
   <tbody>
@@ -244,6 +258,13 @@
 </div>
 {% set ally = [] %}{% set foe = [] %}
 {% for m in v.matches %}{% for p in m.partners %}{% set _ = ally.append(p.number) %}{% endfor %}{% for p in m.opponents %}{% set _ = foe.append(p.number) %}{% endfor %}{% endfor %}
+{% if v.teams|selectattr('opr')|list %}
+<details class="chart-box" open id="opr-box">
+  <summary><h3 style="display:inline">Who scores the most</h3></summary>
+  <div class="chart-sub">Season OPR of every team here, split into auto and the rest of the match. {{ our }} is highlighted. Click a bar to open that team.</div>
+  <div id="ch-opr"></div>
+</details>
+{% endif %}
 <div class="table-wrap"><table id="teams-table" data-sortable>
   <thead><tr><th>Rank</th><th class="l">Team</th><th>OPR</th><th>Auto</th><th>Teleop</th><th>Record</th>
       <th title="This robot leaves its start zone in auto">Leave</th><th title="This robot parks at the end">Park</th><th title="Alliance hive tips per match">Tips</th>
@@ -268,6 +289,47 @@
 {% block scripts %}
 <script>
 const CODE = {{ v.code|tojson }}, OUR = {{ our|tojson }};
+
+// ---- graphs
+(() => {
+  const C = window.SSChart; if (!C) return;
+  const ours = [{% for m in v.matches if m.played %}{% set mk = v.matches_all|selectattr('description', 'equalto', m.description)|first %}
+    {label: {{ (mk.label if mk else m.description)|tojson }}, desc: {{ m.description|tojson }}, us: {{ m.played.us|tojson }}, them: {{ m.played.them|tojson }},
+     result: {{ m.played.result|tojson }}, pred: {{ ('%s–%s'|format(m.pred_us, m.pred_them))|tojson }}},{% endfor %}];
+  const oEl = document.getElementById('ch-ours');
+  if (oEl && ours.length) C.columns(oEl, {
+    title: 'Our scores here', labels: ours.map(m => C.short(m.label)), maxBar: 40,
+    series: [{name: 'Our alliance', values: ours.map(m => m.us)}, {name: 'Other alliance', values: ours.map(m => m.them)}],
+    tooltip: i => { const m = ours[i]; return C.tipHtml(m.desc, [[1, 'Us', m.us], [2, 'Them', m.them],
+      [null, 'Result', {W: 'Won', L: 'Lost', T: 'Tied'}[m.result] || m.result], [null, 'Predicted', m.pred]]); },
+  });
+
+  const scores = [{% for m in v.matches_all if m.played %}
+    {s: {{ m.red_score }}, m: {{ m.label|tojson }}, us: {{ 'true' if m.ours == 'Red' else 'false' }}}, {s: {{ m.blue_score }}, m: {{ m.label|tojson }}, us: {{ 'true' if m.ours == 'Blue' else 'false' }}},{% endfor %}];
+  const sEl = document.getElementById('ch-spread');
+  if (sEl && scores.length) {
+    const hi = Math.max(...scores.map(x => x.s)), raw = Math.max(5, hi / 12), w = [5, 10, 20, 25, 50, 100].find(b => b >= raw) || 100;
+    const bins = []; for (let a = 0; a <= hi; a += w) bins.push({a, b: a + w - 1, n: 0, us: []});
+    scores.forEach(x => { const b = bins[Math.floor(x.s / w)]; b.n++; if (x.us) b.us.push(`${x.m} (${x.s})`); });
+    C.columns(sEl, {
+      title: 'Score spread', labels: bins.map(b => String(b.a)), stacked: true, maxBar: 60,
+      series: [{name: 'Other alliances', values: bins.map(b => b.n - b.us.length)}, {name: 'Our alliance', values: bins.map(b => b.us.length)}],
+      tooltip: i => { const b = bins[i]; return C.tipHtml(`${b.a}–${b.b} points`, [[1, 'Other alliances', b.n - b.us.length], [2, 'Our alliance', b.us.length]]) +
+        (b.us.length ? `<div class="note">Us: ${b.us.join(', ')}</div>` : ''); },
+    });
+  }
+
+  const teams = [{% for p in v.teams if p.opr is not none %}{n: {{ p.number }}, name: {{ p.name|tojson }}, opr: {{ p.opr|tojson }}, auto: {{ p.auto|tojson }}, dc: {{ p.dc|tojson }}, rank: {{ (p.live.rank if p.live else none)|tojson }}},{% endfor %}]
+    .sort((a, b) => b.opr - a.opr);
+  const tEl = document.getElementById('ch-opr');
+  if (tEl && teams.length) C.hbars(tEl, {
+    title: 'Season OPR by team', labels: teams.map(t => String(t.n)), highlight: teams.map(t => t.n === OUR),
+    series: [{name: 'Auto', values: teams.map(t => t.auto)}, {name: 'Teleop and endgame', values: teams.map(t => Math.max(0, t.opr - (t.auto || 0)))}],
+    tooltip: i => { const t = teams[i]; return C.tipHtml(`${t.n} ${t.name}`, [[null, 'OPR', C.fmt(t.opr)], [1, 'Auto', C.fmt(t.auto)], [2, 'Teleop and endgame', C.fmt(t.opr - (t.auto || 0))],
+      [null, 'Teleop OPR alone', C.fmt(t.dc)], [null, 'Rank here', t.rank ? '#' + t.rank : '–']]); },
+    onClick: i => location.href = '/team/' + teams[i].n,
+  });
+})();
 
 // ---- tabs (remembered in the address, e.g. #alliance)
 (() => {

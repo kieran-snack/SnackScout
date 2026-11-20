@@ -67,6 +67,22 @@
   <div class="card"><div class="k">Bonus RPs {{ tip("Ranking points for Swarm and Pollinator goals. These decide rankings at events.") }}</div><div class="v">{{ s.swarm_rate|pct }}</div><div class="s">Swarm · Pollinator {{ s.pollinator1_rate|pct }} / {{ s.pollinator2_rate|pct }}</div></div>
   <div class="card"><div class="k">Alliance score</div><div class="v">{{ s.avg_score|num }}</div><div class="s">auto {{ s.avg_auto|num }} · teleop {{ s.avg_teleop|num }}</div></div>
 </div>
+
+{% if r.chart and r.chart.matches %}
+<h3>📈 Graphs</h3>
+<div class="chart-box">
+  <h3>Points per match</h3>
+  <div class="chart-sub">Their alliance's score without penalties, split into auto and teleop, oldest first. Hover a bar for the match.</div>
+  <div id="ch-points"></div>
+</div>
+{% if r.chart.events|length > 1 %}
+<div class="chart-box">
+  <h3>OPR at each event</h3>
+  <div class="chart-sub">Points this robot added per match at each event. Going up means they are improving.</div>
+  <div id="ch-opr"></div>
+</div>
+{% endif %}
+{% endif %}
 {% else %}
 <div class="empty">No played matches with scores yet this season.{% if r.upcoming %} Their first event is coming up below.{% endif %}</div>
 {% endif %}
@@ -234,6 +250,30 @@
 
 <script>
 const TEAM = {{ number }};
+const CHART = {{ (r.chart or {})|tojson }};
+
+// ---- graphs (charts.js loads at the end of the page, so wait for it)
+addEventListener('DOMContentLoaded', () => {
+  const C = window.SSChart, ms = CHART.matches || [];
+  if (!C || !ms.length) return;
+  const res = {W: 'Won', L: 'Lost', T: 'Tied'};
+  C.columns(document.getElementById('ch-points'), {
+    title: 'Points per match', labels: ms.map(m => m.label), groups: ms.map(m => m.event), stacked: true,
+    series: [{name: 'Auto', values: ms.map(m => m.auto)}, {name: 'Teleop', values: ms.map(m => m.teleop)}],
+    tooltip: i => { const m = ms[i]; return C.tipHtml(`${m.label} · ${m.event}`, [
+      [1, 'Auto', m.auto], [2, 'Teleop', m.teleop], [null, 'Total (no penalties)', m.score],
+      [null, 'Opponents', m.opp], [null, 'Result', res[m.result] || m.result]]) +
+      (m.partners.length ? `<div class="note">With ${m.partners.join(', ')}</div>` : ''); },
+  });
+  const evs = CHART.events || [];
+  const el = document.getElementById('ch-opr');
+  if (el && evs.length > 1) C.line(el, {
+    title: 'OPR at each event', labels: evs.map(e => e.event), series: [{name: 'OPR', values: evs.map(e => e.opr)}],
+    tooltip: i => { const e = evs[i]; return C.tipHtml(e.event, [[1, 'OPR', C.fmt(e.opr)], [null, 'Auto', C.fmt(e.auto)],
+      [null, 'Teleop', C.fmt(e.teleop)], [null, 'Rank', e.rank ? '#' + e.rank : '–'], [null, 'Record', e.record]]); },
+  });
+});
+
 let VIDEO = {matches: {}, events: {}};
 
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

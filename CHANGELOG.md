@@ -7,6 +7,12 @@ Version numbers work like this:
 To release, run `.venv\Scripts\python release.py patch "what changed"` for a small update, or use `minor` for a bigger
 release. It updates `VERSION` and adds the entry below. Then commit and tag (`git tag v1.5.1`).
 
+## 1.8 (2026-11-20)
+- Graphs on team pages: points per match (auto and teleop) and OPR at each event
+- Graphs on competition pages: who scores the most (OPR of every team), score spread, and our scores next to the other alliance
+- Graphs on Compare: points each team adds and how reliable they are
+- Hover any bar or point for details. Graphs work offline and follow light and dark mode
+
 ## 1.7.1 (2026-11-20)
 - Watch is now two buttons: Watch here (plays inside SnackScout) and YouTube ↗ (opens it on YouTube at the start of the match), for videos whose owners turned off playback on other websites
 

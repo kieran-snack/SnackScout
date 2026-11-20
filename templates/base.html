@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ app_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='motion.css') }}?v={{ app_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='hub.css') }}?v={{ app_version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='charts.css') }}?v={{ app_version }}">
   <style id="theme-vars">{{ theme_css|safe }}</style>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍿</text></svg>">
   <meta name="theme-color" content="#ec6f1e">
@@ -61,6 +62,7 @@
 <script src="{{ url_for('static', filename='scout.js') }}?v={{ app_version }}"></script>
 <script src="{{ url_for('static', filename='palette.js') }}?v={{ app_version }}"></script>
 <script src="{{ url_for('static', filename='celebrate.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='charts.js') }}?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

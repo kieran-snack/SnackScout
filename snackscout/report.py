@@ -163,6 +163,25 @@ def verdict(quick, season, scouted):
     return out
 
 
+def _chart_data(ordered):
+    """Oldest event first: every scored match (for the points-per-match chart) and OPR per event."""
+    matches, events = [], []
+    for e in reversed(ordered):
+        ev = e["event"]
+        for r in e["matches"]:
+            if r["has_scores"] and not r["no_show"]:
+                matches.append(dict(event=ev["name"], code=ev["code"], label=r["label"], auto=r["auto"], teleop=r["teleop"],
+                                    score=r["score_np"], opp=r["opp_score"], result=r["result"],
+                                    partners=r["partners"], level=r["level"]))
+        st = e["stats"]
+        if st and e["summary"]:
+            o = st["opr"]
+            events.append(dict(event=ev["name"], code=ev["code"], start=ev["start"], opr=round(o["totalPointsNp"], 1),
+                               auto=round(o["autoPoints"], 1), teleop=round(o["dcPoints"], 1), rank=st.get("rank"),
+                               record=f"{st.get('wins', 0)}-{st.get('losses', 0)}-{st.get('ties', 0)}"))
+    return dict(matches=matches, events=events)
+
+
 def build(number: int, refresh=False):
     t = ftcscout.team(number, refresh=refresh)
     if not t:
@@ -207,5 +226,5 @@ def build(number: int, refresh=False):
         team=t, info=ftcevents.team_info(number), events=ordered, upcoming=upcoming,
         season=season, latest=with_stats[0] if with_stats else None, best_opr=best_opr,
         quick=t.get("quickStats"), team_note=db.team_note(number),
-        scouted=scouted,
+        scouted=scouted, chart=_chart_data(ordered),
     )
