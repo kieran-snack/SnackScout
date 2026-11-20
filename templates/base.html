@@ -8,11 +8,12 @@
   {% if not current_user %}<script>try { const t = localStorage.getItem('ss.theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>{% endif %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ app_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='motion.css') }}?v={{ app_version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='hub.css') }}?v={{ app_version }}">
   <style id="theme-vars">{{ theme_css|safe }}</style>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍿</text></svg>">
   <meta name="theme-color" content="#ec6f1e">
 </head>
-<body data-page="{{ request.endpoint }}" {% if current_user %}data-user="{{ current_user.username }}"{% endif %} {% block bodyattrs %}{% endblock %}>
+<body data-page="{{ request.endpoint }}" {% if current_user %}data-user="{{ current_user.username }}" data-admin="{{ 1 if current_user.role == 'admin' else 0 }}" data-our-team="{{ config.OUR_TEAM }}" data-current-event="{{ current_event or '' }}"{% endif %} {% block bodyattrs %}{% endblock %}>
 <div id="loadbar"><i></i></div>
 <div id="loadmsg"><span class="spin"></span><span>Loading…</span></div>
 <header class="top"><div class="inner">
@@ -23,21 +24,25 @@
     <a href="{{ url_for('events') }}" class="{{ 'on' if request.endpoint in ('events', 'event') }}" title="Competitions">🏆 <span class="lbl">Competitions</span></a>
     {% if config.OUR_TEAM %}<a href="{{ url_for('team', number=config.OUR_TEAM) }}" class="{{ 'on' if request.view_args and request.view_args.get('number')|string == config.OUR_TEAM|string }}" title="Our team">⭐ <span class="lbl">Our team</span></a>{% endif %}
     <a href="{{ url_for('compare') }}" class="{{ 'on' if request.endpoint == 'compare' }}" title="Compare teams">⚖️ <span class="lbl">Compare</span></a>
+    <a href="{{ url_for('help_page') }}" class="{{ 'on' if request.endpoint == 'help_page' }}" title="How to use SnackScout">❓ <span class="lbl">Help</span></a>
   </nav>
   <form class="search" action="{{ url_for('search') }}" role="search">
     <span class="ic">🔍</span>
-    <input id="q" name="q" placeholder="Team number or name…" value="{{ request.args.get('q','') }}" autocomplete="off" aria-label="Search teams">
+    <input id="q" name="q" placeholder="Team, competition or city…" value="{{ request.args.get('q','') }}" autocomplete="off" aria-label="Search teams">
     <kbd>/</kbd>
   </form>
+  <button type="button" class="quick-btn" id="quick-btn" title="Quick actions: every page and setting (Ctrl+K)">⚡ <span class="lbl">Quick actions</span> <kbd>Ctrl K</kbd></button>
   <a class="cloud-pill" id="cloud-pill" href="{{ url_for('settings', tab='cloud') }}" title="Team cloud"><span class="cdot"></span><span class="ctext">Cloud</span></a>
   <div class="usermenu">
     <button class="avatar" id="avatar-btn" type="button" title="{{ current_user.display_name }}" aria-haspopup="true">{{ current_user.display_name[:1]|upper }}</button>
     <div class="menu" id="user-menu" hidden>
       <div class="menu-head"><b>{{ current_user.display_name }}</b><span class="small muted">@{{ current_user.username }}{% if current_user.role == 'admin' %} · admin{% endif %}</span></div>
+      <button type="button" onclick="SS.quickActions()">⚡ Quick actions <kbd>Ctrl K</kbd></button>
       <a href="{{ url_for('settings') }}">⚙️ Settings</a>
       <a href="{{ url_for('settings', tab='look') }}">🎨 Colors &amp; theme</a>
       <button type="button" id="theme-btn">🌓 Toggle dark mode <kbd>t</kbd></button>
       <a href="{{ url_for('settings', tab='cloud') }}">☁️ Team cloud</a>
+      <a href="{{ url_for('help_page') }}">❓ How to use SnackScout</a>
       <a href="{{ url_for('whats_new') }}">✨ What's new <span class="chip" style="margin-left:auto">v{{ app_version }}</span></a>
       <a href="{{ url_for('logout') }}">↩ Log out</a>
     </div>
@@ -48,11 +53,14 @@
 <footer class="foot">
   <span>🍿 SnackScout <a href="{{ url_for('whats_new') }}" title="What's new" class="ver">v{{ app_version }}</a> · Team 34672 Snack Time</span>
   <span>Data: FTCScout &amp; FTC Events API · Video: YouTube</span>
-  {% if current_user %}<span><kbd>/</kbd> search · <kbd>t</kbd> theme · <kbd>,</kbd> settings</span>{% endif %}
+  {% if current_user %}<span><kbd>Ctrl K</kbd> quick actions · <kbd>/</kbd> search · <kbd>t</kbd> theme · <kbd>,</kbd> settings · <a href="{{ url_for('help_page') }}">Help</a></span>{% endif %}
 </footer>
 <div id="toasts" aria-live="polite"></div>
 <button id="totop" class="ghost" title="Back to top" type="button">↑</button>
 <script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='scout.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='palette.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='celebrate.js') }}?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

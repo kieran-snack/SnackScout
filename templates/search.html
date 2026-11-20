@@ -1,9 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Search: {{ q }} · SnackScout{% endblock %}
+{% macro when(d) -%}
+  <div class="when"><b>{{ d[8:10]|int }}</b><span>{{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d[5:7]|int] }}</span></div>
+{%- endmacro %}
 {% block body %}
-<h1>Teams matching “{{ q }}”</h1>
+<h1>Results for “{{ q }}”</h1>
+<p class="muted" style="margin-top:6px">{{ events|length }} competition{{ '' if events|length == 1 else 's' }} · {{ results|length }} team{{ '' if results|length == 1 else 's' }}</p>
+
+{% if events %}
+<h2>🏆 Competitions <span class="count">{{ events|length }}</span></h2>
+<div class="ev-list">
+  {% for e in events %}{% set d = e.dateStart[:10] %}{% set end = (e.dateEnd or e.dateStart)[:10] %}
+  <a class="ev-item {% if d <= today <= end %}now{% elif end < today %}past{% endif %}" href="{{ url_for('event', code=e.code) }}">
+    {{ when(d) }}
+    <div class="grow"><div class="name">{{ e.name }}</div>
+      <div class="small muted">{{ e.city }}{% if e.stateprov %}, {{ e.stateprov }}{% endif %}{% if e.country and e.country != 'USA' %}, {{ e.country }}{% endif %} · {{ e.typeName or '' }} · {{ e.code }}</div></div>
+    {% if d <= today <= end %}<span class="chip on"><span class="live-dot"></span>today</span>{% elif d > today %}<span class="chip">upcoming</span>{% else %}<span class="chip">results</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if results %}
-<p class="muted">{{ results|length }} found. Pick one.</p>
+<h2>👥 Teams <span class="count">{{ results|length }}</span></h2>
 <div class="ev-list">
   {% for t in results %}
   <a class="ev-item" href="{{ url_for('team', number=t.number) }}">
@@ -13,7 +32,9 @@
   </a>
   {% endfor %}
 </div>
-{% else %}
-<div class="empty" style="margin-top:14px">No teams found. Try the team number, or part of the name.</div>
+{% endif %}
+
+{% if not events and not results %}
+<div class="empty" style="margin-top:14px">Nothing found. Try a team number, part of a team or event name, a city, or an event code like <code>USMISCM3</code>.</div>
 {% endif %}
 {% endblock %}

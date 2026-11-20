@@ -3,6 +3,7 @@
 Run:  .venv\\Scripts\\python app.py   then open http://localhost:5000
 """
 import hmac
+import json
 import re
 import time
 from datetime import date, timedelta
@@ -12,9 +13,11 @@ from functools import wraps
 from flask import (Flask, Response, abort, g, jsonify, redirect, render_template, request, send_from_directory,
                    session, url_for)
 
-from snackscout import analysis, autosync, clips, cloud, db, ftcscout, google_auth, report, strategy, themes, version, video
+from snackscout import (analysis, autosync, clips, cloud, db, ftcevents, ftcscout, google_auth, hub, report, slack_bot,
+                        strategy, themes, version, video)
 from snackscout.config import (ANALYSIS_DIR, CLIPS_DIR, HOST, LOCAL_NO_PASSWORD, OUR_TEAM, PORT, SEASON,
                                TEAM_PASSWORD, secret_key)
+from snackscout.config import env_set as config_env_set
 from snackscout.ftcscout import ApiError
 
 app = Flask(__name__)
@@ -22,6 +25,7 @@ app.config.update(OUR_TEAM=OUR_TEAM, SECRET_KEY=secret_key(), PERMANENT_SESSION_
                   SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 db.init()
 cloud.start()
+slack_bot.boot()
 
 CLIP_RE = re.compile(r"[A-Za-z0-9_-]+\.mp4")
 VIDEO_RE = re.compile(r"[A-Za-z0-9_-]{11}")
@@ -264,7 +268,24 @@ def logout():
 def inject_user():
     prefs = db.get_prefs(g.user["username"]) if getattr(g, "user", None) else {}
     return dict(current_user=getattr(g, "user", None), prefs=prefs, theme_css=themes.css(prefs),
-                app_version=version.display(version.RUNNING))
+                app_version=version.display(version.RUNNING), current_event=_current_event_code() if prefs is not None and getattr(g, "user", None) else None)
+
+
+def _current_event_code():
+    """Our team's competition happening today (for quick actions), from the cached team report."""
+    if not str(OUR_TEAM).isdigit():
+        return None
+    try:
+        r = report.build(int(OUR_TEAM))
+    except Exception:  # noqa: BLE001 - never break a page over this
+        return None
+    today = date.today().isoformat()
+    return next((e["event"]["code"] for e in (r or {}).get("events", []) if e["event"]["start"] <= today <= e["event"]["end"]), None)
+
+
+@app.route("/help")
+def help_page():
+    return render_template("help.html")
 
 
 @app.template_filter("num")
@@ -323,10 +344,20 @@ def search():
         return redirect(url_for("compare", teams=",".join(nums)))
     if q.isdigit():
         return redirect(url_for("team", number=int(q)))
-    results = ftcscout.search_teams(q)
-    if len(results) == 1:
+    events = ftcevents.search_events(q)
+    exact = [e for e in events if e["code"].upper() == q.upper().replace(" ", "")]
+    if exact:  # typed an event code like USMISCM3
+        return redirect(url_for("event", code=exact[0]["code"]))
+    try:
+        results = ftcscout.search_teams(q)
+    except ApiError:
+        results = []
+    if len(results) == 1 and not events:
         return redirect(url_for("team", number=results[0]["number"]))
-    return render_template("search.html", q=q, results=results)
+    today = date.today().isoformat()
+    # soonest-first for upcoming events, then most recent past ones
+    events.sort(key=lambda e: (e["dateStart"][:10] < today, abs((date.fromisoformat(e["dateStart"][:10]) - date.today()).days)))
+    return render_template("search.html", q=q, results=results, events=events[:40], today=today)
 
 
 @app.route("/team/<int:number>")
@@ -354,13 +385,132 @@ def events():
                            prev_day=(d - timedelta(days=1)).isoformat(), next_day=(d + timedelta(days=1)).isoformat())
 
 
+@app.get("/api/our-latest-result")
+def our_latest_result():
+    """Our most recent finished match (for the win/loss animation). Live from the event when we're competing today."""
+    our = int(OUR_TEAM) if str(OUR_TEAM).isdigit() else None
+    if not our:
+        return jsonify(result=None)
+    try:
+        r = report.build(our)
+    except ApiError:
+        return jsonify(result=None)
+    if not r:
+        return jsonify(result=None)
+    today = date.today().isoformat()
+    cur = next((e["event"] for e in r["events"] if e["event"]["start"] <= today <= e["event"]["end"]), None)
+    if cur:
+        played = [m for m in strategy.event_view(cur["code"], our)["matches"] if m["played"]]
+        if played:
+            m = played[-1]
+            return jsonify(result=dict(key=f"{cur['code']}:{m['description']}", result=m["played"]["result"], us=m["played"]["us"],
+                                       them=m["played"]["them"], match=m["description"], event=cur["name"], recent=True))
+    rows = sorted((m for e in r["events"] for m in e["matches"] if m["has_scores"]), key=lambda m: m["start_ts"] or 0)
+    if not rows:
+        return jsonify(result=None)
+    m = rows[-1]
+    ev_name = next((e["event"]["name"] for e in r["events"] if e["event"]["code"] == m["event"]), m["event"])
+    return jsonify(result=dict(key=f"{m['event']}:{m['label']}", result=m["result"], us=m["score"], them=m["opp_score"],
+                               match=m["label"], event=ev_name, recent=bool(m["start_ts"] and time.time() - m["start_ts"] < 36 * 3600)))
+
+
+_hub_cache = {}
+
+
+def get_hub(code, our, refresh=False):
+    """Competition hub data, cached for 30 s so the match window and the page don't rebuild it twice."""
+    key = (code, our)
+    hit = _hub_cache.get(key)
+    if hit and not refresh and time.time() - hit[0] < 30:
+        return hit[1]
+    h = hub.event_hub(code, our, refresh=refresh)
+    _hub_cache[key] = (time.time(), h)
+    return h
+
+
 @app.route("/event/<code>")
 def event(code):
+    code = check(EVENT_RE, code.upper())
     our = int(request.args.get("team") or OUR_TEAM or 0)
-    v = strategy.event_view(code.upper(), our, refresh=bool(request.args.get("refresh")))
+    v = get_hub(code, our, refresh=bool(request.args.get("refresh")))
     if not v["event"] and not v["teams"]:
         return render_template("error.html", message=f"Event {code} not found."), 404
-    return render_template("event.html", v=v, our=our, today=date.today().isoformat())
+    return render_template("event.html", v=v, our=our, today=date.today().isoformat(),
+                           picklist=_picklist(code), mnotes=_match_debriefs(code),
+                           team_by={p["number"]: p for p in v["teams"]})
+
+
+def _picklist(code):
+    try:
+        return json.loads(db.team_config(f"picklist:{code}") or "{}")
+    except ValueError:
+        return {}
+
+
+def _match_debriefs(code):
+    with db.conn() as c:
+        rows = c.execute("SELECT key, value FROM team_config WHERE key LIKE ?", (f"mnote:{code}:%",)).fetchall()
+    return {r["key"].split(":", 2)[2]: r["value"] for r in rows if r["value"]}
+
+
+@app.get("/api/event/<code>/match/<key>")
+def api_match(code, key):
+    """Everything the scout-a-match window needs: teams, prediction/result, everyone's notes for this match."""
+    code, our = check(EVENT_RE, code.upper()), int(request.args.get("team") or OUR_TEAM or 0)
+    h = get_hub(code, our)
+    m = hub.find_match(h, key)
+    if not m:
+        abort(404)
+    profs = {p["number"]: p for p in h["teams"]}
+    teams = []
+    for side in ("red", "blue"):
+        for n in m[side]:
+            note = db.match_notes(n).get((code, m["match_id"])) or {}
+            p = profs.get(n, {})
+            teams.append(dict(number=n, name=p.get("name"), alliance=side, opr=p.get("opr"), ours=n == our,
+                              note={k: note.get(k) for k in db.MATCH_FIELDS} | {"by": note.get("updated_by")} if note else None))
+    return jsonify(match=m, teams=teams, event=dict(code=code, name=(h["event"] or {}).get("name")),
+                   debrief=db.team_config(f"mnote:{code}:{key}") or "",
+                   me=g.user["display_name"])
+
+
+@app.get("/api/event/<code>/match/<key>/video")
+def api_match_video(code, key):
+    code, our = check(EVENT_RE, code.upper()), int(request.args.get("team") or OUR_TEAM or 0)
+    h = get_hub(code, our)
+    m = hub.find_match(h, key)
+    ev = h["event"]
+    if not m or not ev or not m["start_ts"]:
+        return jsonify(video=None, reason="This match hasn't been played yet." if m and not m["played"] else "No start time for this match.")
+    starts = [x["start_ts"] for x in h["matches_all"] if x["start_ts"]]
+    vids = video.ensure_event_videos(ev, starts)
+    loc = video.locate(vids, m["label"], m["start_ts"], field=m.get("field"))
+    if not loc:
+        return jsonify(video=None, reason="No livestream found for this event. Add one under Video settings on a team page.")
+    loc["clip_name"] = clips.clip_name(code, m["label"], loc["video_id"], loc["start"])
+    loc["clip"] = clips.status(loc["clip_name"])
+    return jsonify(video=loc)
+
+
+@app.post("/api/event/<code>/match/<key>/debrief")
+def api_match_debrief(code, key):
+    code = check(EVENT_RE, code.upper())
+    check(re.compile(r"[A-Z]{1,2}-[0-9-]{1,9}"), key)
+    text = ((request.get_json() or {}).get("text") or "").strip()[:4000]
+    db.set_team_config(f"mnote:{code}:{key}", text)
+    return jsonify(ok=True)
+
+
+@app.route("/api/event/<code>/picklist", methods=["GET", "POST"])
+def api_picklist(code):
+    code = check(EVENT_RE, code.upper())
+    if request.method == "POST":
+        d = request.get_json() or {}
+        order = [int(n) for n in d.get("order", []) if str(n).isdigit()][:60]
+        status = {str(int(k)): v for k, v in (d.get("status") or {}).items()
+                  if str(k).isdigit() and v in ("picked", "declined", "dnp", "")}
+        db.set_team_config(f"picklist:{code}", json.dumps({"order": order, "status": status, "by": g.user["display_name"]}))
+    return jsonify(_picklist(code))
 
 
 @app.route("/compare")
@@ -406,8 +556,12 @@ def videos(number):
             continue
         vids = video.ensure_event_videos(ev["event"], times, refresh=refresh)
         events[ev["event"]["code"]] = vids
+        fields = {}
+        if len(vids) > 1:  # several streams: match each match to its field's stream
+            fields = {hub.match_key(s["tournamentLevel"], s.get("series"), s["matchNumber"]): s.get("field")
+                      for s in ftcevents.schedule(ev["event"]["code"])}
         for m in ev["matches"]:
-            loc = video.locate(vids, m["label"], m["start_ts"])
+            loc = video.locate(vids, m["label"], m["start_ts"], field=fields.get(m["label"]))
             if loc:
                 loc["clip_name"] = clips.clip_name(m["event"], m["label"], loc["video_id"], loc["start"])
                 loc["clip"] = clips.status(loc["clip_name"])
@@ -554,6 +708,7 @@ def settings():
                            google_on=google_auth.configured(), google_here=bool(google_auth.origin_for(request)),
                            google_client_id=google_auth.client()[0] if g.user["role"] == "admin" else None,
                            google_redirects=[google_auth.LOCAL_REDIRECT, google_auth.RELAY_URL],
+                           slack=slack_bot.status(),
                            tab=request.args.get("tab", "look"), welcome=request.args.get("welcome"))
 
 
@@ -632,6 +787,57 @@ def settings_cloud():
     return redirect(url_for("settings", tab="cloud", msg="Connected! Your scouting will sync to the team cloud."))
 
 
+@app.post("/settings/slack")
+@admin_required
+def settings_slack():
+    f = request.form
+    bot, app_tok, channel = (f.get("bot_token") or "").strip(), (f.get("app_token") or "").strip(), (f.get("channel") or "").strip()
+    if not bot.startswith("xoxb-") or not app_tok.startswith("xapp-"):
+        return redirect(url_for("settings", tab="slack", bad=1,
+                                msg="The Bot token starts with xoxb- and the App-level token starts with xapp-."))
+    st = slack_bot.configure(bot, app_tok, channel or "#scouting")
+    if not st["connected"]:
+        return redirect(url_for("settings", tab="slack", bad=1, msg=st["error"] or "Couldn't connect to Slack."))
+    return redirect(url_for("settings", tab="slack", msg=f"Connected to {st['team']} as @{st['bot']}. Try /scout help in Slack."))
+
+
+@app.post("/settings/slack/options")
+@admin_required
+def settings_slack_options():
+    for k in ("remind", "results", "notes"):
+        db.set_team_config("slack_" + k, "1" if request.form.get(k) else "0")
+    ch = (request.form.get("channel") or "").strip()
+    if ch and ch != slack_bot.status()["channel"]:
+        config_env_set("SLACK_CHANNEL", ch)
+        slack_bot._cfg["channel"] = ch
+        slack_bot._channel_id = None
+    return redirect(url_for("settings", tab="slack", msg="Saved."))
+
+
+@app.post("/settings/slack/disconnect")
+@admin_required
+def settings_slack_disconnect():
+    slack_bot.disconnect()
+    return redirect(url_for("settings", tab="slack", msg="Slack disconnected from this laptop."))
+
+
+@app.post("/api/slack/test")
+@admin_required
+def slack_test():
+    try:
+        slack_bot.send(f"👋 Hi from SnackScout {version.display(version.RUNNING)}! I'll post match reminders, results and new "
+                       "scouting notes here. Try `/scout help`.")
+        return jsonify(ok=True)
+    except Exception as e:  # noqa: BLE001
+        return jsonify(ok=False, error=str(e)[:300])
+
+
+@app.get("/api/slack/manifest")
+@admin_required
+def slack_manifest():
+    return Response((version.ROOT / "slack" / "manifest.json").read_text(encoding="utf-8"), mimetype="text/plain")
+
+
 @app.get("/api/schema.sql")
 @admin_required
 def schema_sql():
@@ -654,7 +860,9 @@ def cloud_status():
 def public_status():
     """For the launcher on this laptop: no secrets, just whether setup is needed and cloud health."""
     s = cloud.status()
+    sl = slack_bot.status()
     return jsonify(setup_needed=db.user_count() == 0, users=db.user_count(), version=version.RUNNING,
+                   slack=dict(configured=sl["configured"], connected=sl["connected"]),
                    cloud=dict(configured=s["configured"], ok=s["ok"], ago=s["ago"], pending=s["pending"]))
 
 

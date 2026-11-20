@@ -15,6 +15,21 @@
   <p class="small faint" style="margin-top:10px">Tip: type <b>several numbers</b> like <code>16750, 3231</code> to compare them · press <kbd>/</kbd> anywhere to search</p>
 </div>
 
+<div class="quick-tiles">
+  {% if current_event %}
+  <a class="qtile" href="{{ url_for('event', code=current_event) }}#ours"><span class="qi">📝</span><b>Scout a match</b><span class="small">Today's matches, video and notes</span></a>
+  <a class="qtile" href="{{ url_for('event', code=current_event) }}#all"><span class="qi">🗓</span><b>All matches</b><span class="small">The whole schedule and results</span></a>
+  <a class="qtile" href="{{ url_for('event', code=current_event) }}#alliance"><span class="qi">🤝</span><b>Alliance selection</b><span class="small">Suggestions and our pick list</span></a>
+  {% else %}
+  <a class="qtile" href="{{ url_for('events') }}"><span class="qi">📝</span><b>Scout a match</b><span class="small">Pick a competition, then press Scout</span></a>
+  <a class="qtile" href="{{ url_for('events') }}"><span class="qi">🏆</span><b>Competitions</b><span class="small">Any event, any day, worldwide</span></a>
+  {% endif %}
+  <a class="qtile" href="{{ url_for('compare') }}"><span class="qi">⚖️</span><b>Compare teams</b><span class="small">Side by side</span></a>
+  <a class="qtile" href="{{ url_for('settings', tab='look') }}"><span class="qi">🎨</span><b>Colors &amp; theme</b><span class="small">Palettes, dark mode</span></a>
+  <a class="qtile" href="{{ url_for('help_page') }}"><span class="qi">❓</span><b>How-to guide</b><span class="small">Every feature, step by step</span></a>
+  <button type="button" class="qtile" onclick="SS.quickActions()" style="text-align:left;font:inherit;cursor:pointer"><span class="qi">⚡</span><b>Quick actions</b><span class="small">Everything else · Ctrl K</span></button>
+</div>
+
 <div class="home-grid">
   <div>
     {% if next_ev %}

@@ -277,7 +277,7 @@ function renderVidCell(key) {
   else if (v.clip && (v.clip.state === 'queued' || v.clip.state === 'downloading')) clip = '<span class="spin" title="Downloading clip… about 2 minutes"></span>';
   else clip = `<button class="ghost small" title="Download this match to watch offline" onclick="makeClip('${key}')">⬇</button>`;
   if (v.clip && v.clip.state === 'error') clip += ` <span class="L small" title="${esc(v.clip.error)}">failed</span>`;
-  td.innerHTML = `<span class="btn-row" style="flex-wrap:nowrap;justify-content:center"><a class="btn small" href="${v.url}" target="_blank" title="${esc(v.title)} @ ${fmtT(v.offset)}">▶ Watch</a>${clip}</span>`;
+  td.innerHTML = `<span class="btn-row" style="flex-wrap:nowrap;justify-content:center"><button type="button" class="small" onclick="SS.openPlayer(VIDEO.matches['${key}'], document.getElementById('nr-${key}').querySelector('form').dataset.label)" title="${esc(v.title)} @ ${fmtT(v.offset)}">▶ Watch</button>${clip}</span>`;
 }
 
 async function makeClip(key) {
@@ -401,7 +401,7 @@ function renderResult(key, r, labels) {
   v.result = r; v.labels = labels;
   const A = r[ours], B = r[other];
   let html = '<div class="cv"><b>🔬 OpenCV analysis</b> ';
-  if (!r.overlay_ok || r.match_start == null)
+  if (!r.overlay_ok || r.match_start == null || r.wrong_match)
     html += `<div class="banner" style="margin:6px 0">This clip doesn't contain the match, so the stream timing is probably off.
       <button class="small" onclick="autoSync('${f.dataset.event}', '${v.video_id}', this)">🔍 Auto-sync this stream</button>
       <span class="small muted">(OpenCV reads the scoreboard in the stream, about 2 minutes, then download the clip again)</span></div>`;

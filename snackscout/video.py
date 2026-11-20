@@ -183,28 +183,52 @@ def ensure_event_videos(event: dict, match_times: list[float], refresh=False) ->
     return db.event_videos(code)
 
 
-def locate(event_videos: list[dict], label: str, match_ts: float | None):
-    """Return where in which video a match is, or None."""
+def _field_of(title):
+    m = re.search(r"\bfield\s*#?\s*(\d)\b", title or "", re.I)
+    return m.group(1) if m else None
+
+
+def locate(event_videos: list[dict], label: str, match_ts: float | None, field=None):
+    """Return where in which video a match is, or None.
+
+    Events with two fields often stream both at the same time; when several streams cover the match, the one
+    whose title names the match's field wins (otherwise a Field 2 match could open on the Field 1 stream)."""
     priority = {"manual": 0, "event link": 1, "youtube search": 2}
+    found = []
     for v in sorted(event_videos, key=lambda v: priority.get(v.get("source"), 3)):
         meta = video_meta(v["video_id"])
         if not meta:
             continue
+        sync = v.get("sync_offset") or 0
         off = _chapter_offset(meta, label)
         method = "chapter"
         if off is None and match_ts and meta.get("start_ts"):
-            off = match_ts - meta["start_ts"]
+            off = match_ts - meta["start_ts"] + sync   # apply the stream's sync before checking it's inside the video
             method = "timestamp"
             dur = meta.get("duration") or 0
             if off < -120 or (dur and off > dur):
                 off = None
+        elif off is not None:
+            off += sync
         if off is None:
             continue
-        off = max(0, off + (v.get("sync_offset") or 0))
+        off = max(0, off)
         start = max(0, int(off - CLIP_BEFORE))
-        return dict(video_id=v["video_id"], offset=int(off), start=start, method=method,
-                    title=meta["title"], url=f"https://www.youtube.com/watch?v={v['video_id']}&t={start}s")
-    return None
+        vid = v["video_id"]
+        found.append(dict(video_id=vid, offset=int(off), start=start, method=method, title=meta["title"],
+                          url=f"https://www.youtube.com/watch?v={vid}&t={start}s",
+                          embed=f"https://www.youtube-nocookie.com/embed/{vid}?start={start}&autoplay=1&rel=0",
+                          stream_field=_field_of(meta["title"])))
+    if not found:
+        return None
+    if field and len(found) > 1:
+        for f in found:
+            if f["stream_field"] == str(field):
+                return f
+        unlabeled = [f for f in found if not f["stream_field"]]  # a stream labeled for another field is wrong
+        if unlabeled:
+            return unlabeled[0]
+    return found[0]
 
 
 def team_videos(number: int, name: str) -> list[dict]:

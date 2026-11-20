@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SnackScout</title>
+<title>SnackScout Launcher</title>
 <style>
 :root {
   --bg: #17120d; --bg2: #1f1812; --card: #261d15; --card2: #2e241a; --line: #3b2f23;
@@ -78,13 +78,17 @@ pre { background: #0f0b08; border: 1px solid var(--line); border-radius: 10px; p
 .hide { display: none !important; }
 .ver { font-size: 12px; font-weight: 700; color: var(--brand2); background: #f08a2422; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
 .update { display: flex; gap: 10px; align-items: center; background: #1d2a1c; border: 1px solid #2f5a33; color: #d6f5d9; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+.busybar { height: 4px; border-radius: 999px; background: #f08a2422; overflow: hidden; position: relative; margin: 12px auto 0; max-width: 260px; }
+.busybar i { position: absolute; top: 0; bottom: 0; width: 40%; border-radius: inherit; background: linear-gradient(90deg, var(--brand2), var(--brand)); animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { left: -40%; } to { left: 100%; } }
+button.busy { opacity: .55; cursor: progress; }
 .foot { text-align: center; color: var(--faint); font-size: 12px; margin-top: 8px; }
 </style>
 </head>
 <body>
 <div class="top">
   <div class="logo">🍿</div>
-  <div class="grow"><h1>SnackScout <span class="ver" id="ver"></span></h1><div class="sub">Team 34672 · Snack Time · scouting launcher</div></div>
+  <div class="grow"><h1>SnackScout Launcher <span class="ver" id="ver"></span></h1><div class="sub">Team 34672 · Snack Time</div></div>
   <button class="ghost sm" id="btn-restart-top" title="Restart SnackScout (keeps the online link)">↻ Restart</button>
 </div>
 
@@ -95,6 +99,7 @@ pre { background: #0f0b08; border: 1px solid var(--line); border-radius: 10px; p
 <!-- ======================= main status ======================= -->
 <div class="card hero">
   <span class="status"><span id="dot" class="dot"></span><span id="status-text">Offline</span></span>
+  <div class="busybar hide" id="busybar"><i></i></div>
 
   <!-- offline -->
   <div id="v-off">
@@ -149,6 +154,9 @@ pre { background: #0f0b08; border: 1px solid var(--line); border-radius: 10px; p
   <div class="row" style="margin-top:10px"><div class="grow"><div style="font-weight:600"><span id="cloud-dot" class="dot" style="display:inline-block;margin-right:6px"></span>Team cloud</div>
     <div class="small muted" id="cloud-line">–</div></div>
     <button class="ghost sm" id="btn-cloud">Settings</button></div>
+  <div class="row" style="margin-top:10px"><div class="grow"><div style="font-weight:600"><span id="slack-dot" class="dot" style="display:inline-block;margin-right:6px"></span>Slack</div>
+    <div class="small muted" id="slack-line">–</div></div>
+    <button class="ghost sm" id="btn-slack">Settings</button></div>
 </div>
 
 <div class="card">
@@ -256,10 +264,9 @@ function render() {
   const busy = S.server === 'restarting' || S.server === 'starting';
   $('update').classList.toggle('hide', !S.update_ready);
   $('update-text').textContent = S.update_ready ? `Version ${S.version} is installed, but ${S.running_version} is still running. Restarting takes about 10 seconds; the online link stays up.` : '';
-  for (const id of ['btn-restart', 'btn-restart-top', 'btn-update']) {
-    const b = $(id); b.disabled = busy;
-    b.innerHTML = busy && S.server === 'restarting' ? '<span class="spin"></span> Restarting' : (id === 'btn-update' ? '↻ Restart now' : '↻ Restart');
-  }
+  // buttons keep their size and label (swapping in a spinner made them jump); one progress bar shows the work
+  for (const id of ['btn-restart', 'btn-restart-top', 'btn-update']) { $(id).disabled = busy; $(id).classList.toggle('busy', busy); }
+  $('busybar').classList.toggle('hide', !busy);
   $('btn-restart').classList.toggle('hide', S.server === 'stopped');
   $('btn-restart-top').classList.toggle('hide', S.server === 'stopped');
   $('btn-online').disabled = !S.cloudflared;
@@ -278,6 +285,10 @@ function render() {
   $('cloud-line').textContent = S.server !== 'running' ? '–' : !cl.configured ? 'Not set up: scouting stays on this laptop' :
     cl.ok === false ? "Can't reach the cloud right now (changes upload later)" : cl.pending ? `${cl.pending} changes waiting to upload` :
     cl.ago != null ? `Synced ${cl.ago < 60 ? cl.ago + ' s' : Math.round(cl.ago / 60) + ' min'} ago` : 'Connecting…';
+  const sl = pub.slack || {};
+  $('slack-dot').className = 'dot' + (sl.connected ? ' good' : sl.configured ? ' bad' : '');
+  $('slack-line').textContent = S.server !== 'running' ? '–' : sl.connected ? '/scout works · posting reminders, results and notes' :
+    sl.configured ? "Can't connect: check Settings → Slack" : 'Not set up';
 
   $('lan-url').textContent = S.lan_url ? S.lan_url.replace('http://', '') : 'Not connected to a network';
   $('lan-row').classList.toggle('hide', !S.lan_url);
@@ -309,6 +320,7 @@ function wire() {
   $('btn-setup').onclick = () => openPage('/setup');
   $('btn-team').onclick = () => openPage('/settings?tab=team');
   $('btn-cloud').onclick = () => openPage('/settings?tab=cloud');
+  $('btn-slack').onclick = () => openPage('/settings?tab=slack');
   $('btn-change-pw').onclick = startPwEdit;
   $('btn-cancel-pw').onclick = () => { editingPw = false; $('pw-edit').classList.add('hide'); $('pw-show').classList.remove('hide'); };
   $('btn-save-pw').onclick = savePw;

@@ -55,6 +55,26 @@ The key is saved in `.env` on that laptop only. It is never sent to browsers or 
 The cloud pill at the top of every page shows the status: **Synced**, **N to sync**, **Offline** or **Local only**.
 Free Supabase projects pause after about a week with no activity; click **Restore** in the Supabase dashboard to wake one.
 
+## Slack
+
+Ask SnackScout things from Slack, and get automatic updates in a channel.
+
+| Command | What you get |
+|---|---|
+| `/scout 16750` or `/scout technototes` | a team's stats, strengths, and our scouting and pit notes |
+| `/scout next` | our next match: partners, opponents, prediction, top strategy tips |
+| `/scout event` | today's schedule and results for us |
+| `/scout compare 34672 16750 3231` | side by side |
+| `/scout help` | the list |
+
+Automatic posts (each can be switched off): **match reminders** about 15 minutes before our matches, **results** after
+each match, and **new scouting notes** from any laptop.
+
+Setup (admin, about 5 minutes): **Settings → Slack**. It walks you through creating the Slack app from
+`slack/manifest.json` (a **Copy the manifest** button is there), then you paste the two tokens. SnackScout uses
+Slack's Socket Mode, so it needs no public address. It only works while SnackScout runs on the laptop that has the
+tokens, and only that laptop posts.
+
 ## Settings
 
 Open **⚙️ Settings** from the avatar menu, or press `,`. Settings are saved per person:
@@ -86,7 +106,7 @@ Changes to the launcher itself need the launcher window closed and reopened.
 
 ## The SnackScout launcher (recommended)
 
-Open **SnackScout** from the Desktop or Start menu. To recreate the shortcuts, run
+Open **SnackScout Launcher** from the Desktop or Start menu. To recreate the shortcuts, run
 `powershell -ExecutionPolicy Bypass -File launcher\make_shortcuts.ps1`.
 
 - **🌐 Go online** starts SnackScout and a free Cloudflare tunnel. Your team opens
@@ -105,7 +125,17 @@ Cloudflare tunnel links, which is why it works this way.
 
 ## Competition day
 
-1. Click **Competitions** and pick today's event. Our events are listed first.
+Every competition page has tabs:
+- **⭐ Our matches:** prediction and strategy for each match, plus 🗒 match notes.
+- **🗓 All matches:** every match at the event, with scores, predictions, upsets and what to watch.
+- **🏅 Rankings:** the live official rankings.
+- **🤝 Alliance selection:** suggested partners with reasons, and a shared pick list.
+- **👥 Teams:** every team at the event, with their stats.
+
+Event highs (high score, best auto, biggest win, closest match) sit at the top. **📝 Scout** on any match opens the video
+and a form for all 4 robots. The in-app guide (**❓ Help**) and **⚡ Quick actions** (`Ctrl+K`) cover everything else.
+
+1. Click **Competitions** and pick today's event, or search any competition by name, city or code. Our events are listed first.
 2. Before the schedule is posted, the page lists every team at the event with their stats. It checks for the schedule every 2 minutes.
 3. Once the schedule is up, each of our matches shows:
    - who we're **with** and **against**, with each team's season OPR;

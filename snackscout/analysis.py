@@ -43,12 +43,30 @@ def _debounce(samples, key):
     return out
 
 
-def _match_start(samples):
-    """Clip time when the timer starts counting down from 2:30."""
+def _match_starts(samples):
+    """Every match start the scoreboard shows in the clip (a clip can catch the end of the previous match)."""
+    starts = []
     for s in samples:
-        if s["timer"] is not None and 130 <= s["timer"] <= 149:
-            return s["t"] - (150 - s["timer"])
-    return None
+        t = s["timer"]
+        if t is None or t >= 150 or t < 10:
+            continue
+        st = s["t"] - (150 - t) if t > 122 else s["t"] - AUTO_LEN - TRANSITION - (120 - t) if t < 118 else None
+        if st is None:
+            continue
+        if starts and abs(st - starts[-1][-1]) < 6:
+            starts[-1].append(st)
+        else:
+            starts.append([st])
+    return [sum(g) / len(g) for g in starts if len(g) >= 2]
+
+
+def _match_start(samples):
+    """Clip time when *this* match starts: the start nearest to where the clip expects it (CLIP_BEFORE s in).
+    Picking the first start found used to analyse the previous match when a stream's sync was off."""
+    starts = _match_starts(samples)
+    if not starts:
+        return None
+    return min(starts, key=lambda s: abs(s - CLIP_BEFORE))
 
 
 def _alliance(samples, side, start):
@@ -168,6 +186,7 @@ def analyze(clip_name: str, hives: dict | None):
         clip=clip_name, duration=round(duration, 1), width=w, height=h, overlay_ok=overlay_ok,
         match_start=round(start, 1) if start is not None else None,
         sync_error=round(start - CLIP_BEFORE, 1) if start is not None else None,
+        wrong_match=start is None or abs(start - CLIP_BEFORE) > 45,
         red=_alliance(samples, "red", start), blue=_alliance(samples, "blue", start),
         timeline=[[s["t"], s["red"], s["blue"]] for s in samples if s["red"] is not None or s["blue"] is not None],
         hives_calibrated=bool(boxes), shots={}, bursts=[],

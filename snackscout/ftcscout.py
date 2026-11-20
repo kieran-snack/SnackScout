@@ -96,7 +96,8 @@ query($s: Int!, $c: String!) {
     code name start end timezone type started ongoing finished website liveStreamURL
     location { venue city state country }
     teams { teamNumber team { name } stats { ... on TeamEventStats2026 { rank rp wins losses ties qualMatchesPlayed opr { totalPointsNp } } } }
-    matches { description actualStartTime }
+    matches { id description tournamentLevel series matchNum actualStartTime scheduledStartTime hasBeenPlayed
+              teams { teamNumber alliance station } }
   }
 }
 """

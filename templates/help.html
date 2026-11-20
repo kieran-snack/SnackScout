@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}How to use SnackScout{% endblock %}
+{% block body %}
+<h1>❓ How to use SnackScout</h1>
+<p class="muted" style="margin-top:6px;max-width:68ch">Short how-tos for everything in SnackScout. Press <kbd>Ctrl</kbd>+<kbd>K</kbd> anywhere to jump to any page or setting.</p>
+
+<nav class="help-toc">
+  <a href="#scout">📝 Scout a match</a><a href="#competition">🏆 Competition day</a><a href="#alliance">🤝 Alliance selection</a>
+  <a href="#teams">👥 Look up any team</a><a href="#video">🎬 Videos &amp; OpenCV</a><a href="#slack">💬 Slack</a>
+  <a href="#sharing">🌐 Sharing &amp; the launcher</a><a href="#settings">⚙️ Settings</a><a href="#trouble">🛠 Fixes</a>
+</nav>
+
+<section class="help" id="scout">
+  <h2>📝 Scout a match</h2>
+  <p>You can scout <b>any</b> match, ours or anyone else's, and notes from every scout sync to the whole team.</p>
+  <ol class="steps-help">
+    <li>Open the competition: <b>🏆 Competitions</b> → pick the event (or Quick actions → <i>Today's competition</i>).</li>
+    <li>Find the match on <b>⭐ Our matches</b> or <b>🗓 All matches</b>, and press <b>📝 Scout</b>.</li>
+    <li>The match window opens with the video on the left. It starts at the right moment. Fill in the form on the right, while it plays or afterwards.</li>
+    <li>Switch robots with the tabs at the top (🔴/🔵 team numbers). Each robot has its own form. Press <b>💾 Save</b> or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>.</li>
+    <li>Use <b>🗒 Match notes</b> for the whole match: what happened, what to change next time.</li>
+  </ol>
+  <p class="small muted">Also on team pages: open a team, scroll to <b>Matches</b>, and press <b>📝 Scout</b> on a row.</p>
+</section>
+
+<section class="help" id="competition">
+  <h2>🏆 Competition day</h2>
+  <ul>
+    <li><b>Next match card:</b> countdown, partners and opponents, the predicted score, and the top strategy tips. <b>🗒 Plan / notes</b> saves your plan.</li>
+    <li><b>⭐ Our matches:</b> every match has a prediction and strategy tips. Upcoming ones show their tips open.</li>
+    <li><b>🗓 All matches:</b> the whole schedule with scores, predictions, upsets 🔥 and "what to watch". Type a team number to find all its matches.</li>
+    <li><b>🏅 Rankings:</b> live from the official scoring system. The top 4 are likely alliance captains.</li>
+    <li><b>Event highs:</b> high score, best auto, biggest win, closest match and upsets so far, at the top of the page.</li>
+    <li><b>Viewing as team:</b> type any team number to see the schedule and strategy from their side.</li>
+  </ul>
+  <p class="small muted">The page refreshes on its own during an event, and pauses while you're typing or have a window open.</p>
+</section>
+
+<section class="help" id="alliance">
+  <h2>🤝 Alliance selection</h2>
+  <ol class="steps-help">
+    <li>Open the competition → <b>🤝 Alliance selection</b>.</li>
+    <li>The suggestions rank every team by <b>fit</b>: OPR, auto and park reliability, an auto stronger than ours, penalties, and breakdowns our scouts saw. The reasons are listed so you can check them.</li>
+    <li>Press <b>＋</b> to add a team to the <b>pick list</b>. Reorder with ↑ ↓.</li>
+    <li>During selection, mark teams <i>picked by others</i>, <i>declined us</i> or <i>don't pick</i>. Everyone on the team sees the same list.</li>
+  </ol>
+</section>
+
+<section class="help" id="teams">
+  <h2>👥 Look up any team</h2>
+  <ul>
+    <li>Type a <b>number</b>, a <b>name</b>, a <b>competition</b>, a <b>city</b> or an <b>event code</b> in the search bar (<kbd>/</kbd>). It searches teams and competitions worldwide.</li>
+    <li>Team pages show summary tags, OPR and rank, every match with video, our scouting, and pit notes.</li>
+    <li>Press <b>☆</b> to favorite a team. Favorites and recently viewed teams show on the home page.</li>
+    <li><b>⚖️ Compare</b> up to 6 teams side by side. Type <code>34672, 16750</code> in the search bar as a shortcut.</li>
+  </ul>
+</section>
+
+<section class="help" id="video">
+  <h2>🎬 Videos &amp; OpenCV</h2>
+  <ul>
+    <li><b>▶ Watch</b> opens the match inside SnackScout, starting at the right moment (YouTube's own page sometimes resumes where you last stopped).</li>
+    <li><b>⬇</b> on a team page downloads the match so it plays without Wi-Fi (about 2 minutes).</li>
+    <li><b>🔬 Analyze</b> (in a team page's Scout panel) reads the scoreboard and spots pollen shots. Mark the two hives once per livestream, then tap <b>Ours / Partner / Not a shot</b> on each burst.</li>
+    <li><b>Wrong moment or wrong match?</b> On a team page, open <b>Video settings</b> under the match table and press <b>🔍 Auto-sync</b>. At two-field events, SnackScout picks the stream whose title names the match's field.</li>
+  </ul>
+</section>
+
+<section class="help" id="slack">
+  <h2>💬 Slack</h2>
+  <ul>
+    <li><code>/scout 16750</code> for a team, <code>/scout next</code> for our next match, <code>/scout event</code> for today's schedule and results, <code>/scout compare 34672 16750</code>.</li>
+    <li>#snackscout gets match reminders about 15 minutes before our matches, results after each match, and new scouting notes.</li>
+    <li>Slack only works while SnackScout runs on the team laptop. Admins set it up under <a href="{{ url_for('settings', tab='slack') }}">Settings → Slack</a>.</li>
+  </ul>
+</section>
+
+<section class="help" id="sharing">
+  <h2>🌐 Sharing &amp; the launcher</h2>
+  <ul>
+    <li>On the team laptop, open <b>SnackScout Launcher</b> (Desktop or Start menu) and press <b>🌐 Go online</b>. Teammates open <b>kieran-snack.github.io/scout</b>, the same link every time, and the QR code works too.</li>
+    <li><b>Copy invite for team</b> copies the link and the team code for your team chat.</li>
+    <li><b>↻ Restart</b> reloads SnackScout after an update. The online link stays up.</li>
+    <li>New teammates: <b>Continue with Google</b> on the login page, then enter the team code. No password needed.</li>
+  </ul>
+</section>
+
+<section class="help" id="settings">
+  <h2>⚙️ Settings</h2>
+  <ul>
+    <li><a href="{{ url_for('settings', tab='look') }}">Look &amp; feel</a>: 8 color palettes or your own color, dark mode, text size, animations.</li>
+    <li><a href="{{ url_for('settings', tab='scouting') }}">Scouting</a>: how often event pages refresh, and whether match tables show every column.</li>
+    <li><a href="{{ url_for('settings', tab='account') }}">Account</a>: your name, password, and Google sign-in.</li>
+    <li><a href="{{ url_for('settings', tab='cloud') }}">Team cloud</a>: sync status. Scouting saved offline uploads later.</li>
+  </ul>
+</section>
+
+<section class="help" id="trouble">
+  <h2>🛠 Fixes</h2>
+  <div class="table-wrap"><table>
+    <tr><th class="l">Problem</th><th class="l">Fix</th></tr>
+    <tr><td class="l">The link says "SnackScout is offline"</td><td class="l" style="white-space:normal">The team laptop isn't online. Open the launcher there and press Go online.</td></tr>
+    <tr><td class="l">A match shows "no video"</td><td class="l" style="white-space:normal">The event wasn't streamed, or SnackScout didn't find the stream. Paste it under Video settings on a team page.</td></tr>
+    <tr><td class="l">Video opens at the wrong moment</td><td class="l" style="white-space:normal">Video settings → 🔍 Auto-sync (about 2 minutes, once per stream).</td></tr>
+    <tr><td class="l">The cloud pill says "Offline"</td><td class="l" style="white-space:normal">No internet right now. Your scouting is saved here and uploads later by itself.</td></tr>
+    <tr><td class="l">Update ready in the launcher</td><td class="l" style="white-space:normal">Press Restart now. It takes about 10 seconds.</td></tr>
+  </table></div>
+</section>
+{% endblock %}

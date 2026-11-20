@@ -1,17 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{{ v.event.name if v.event else v.code }} · SnackScout{% endblock %}
+{% macro tlink(n) -%}
+  {%- set p = team_by.get(n) -%}
+  <a href="{{ url_for('team', number=n) }}" title="{{ p.name if p else '' }}{% if p and p.opr is not none %} · OPR {{ '%.0f'|format(p.opr) }}{% endif %}" class="tnum {{ 'me' if n == our }}">{{ n }}</a>
+{%- endmacro %}
 {% macro team_link(p, show_opr=True) -%}
   <a href="{{ url_for('team', number=p.number) }}" title="{{ p.name }}"><b>{{ p.number }}</b> <span class="small" style="color:var(--ink)">{{ p.name|truncate(22, True, '…') }}</span></a>
   {%- if show_opr %} <span class="chip" title="Season OPR (points this robot adds per match)">{{ p.opr|num if p.opr is not none else 'new' }}</span>{% endif %}
 {%- endmacro %}
 {% block body %}
 {% set e = v.event %}
+{% set code = v.code %}
 {% set live = e and (e.start <= today <= e.end) %}
-{% set ally = [] %}{% set foe = [] %}
-{% for m in v.matches %}{% for p in m.partners %}{% set _ = ally.append(p.number) %}{% endfor %}{% for p in m.opponents %}{% set _ = foe.append(p.number) %}{% endfor %}{% endfor %}
 
 <div class="hero">
-  <div>
+  <div style="min-width:0">
     <div class="num">{% if live %}<span class="live-dot"></span>HAPPENING TODAY{% elif e and e.end < today %}FINISHED{% else %}COMPETITION{% endif %}</div>
     <h1>{{ e.name if e else v.code }}</h1>
     {% if e %}<div class="meta">📅 {{ e.start }}{% if e.end != e.start %} – {{ e.end }}{% endif %} · 📍 {{ e.location.venue or '' }} {{ e.location.city }}, {{ e.location.state }} · {{ v.code }}</div>{% endif %}
@@ -20,10 +23,15 @@
       <a href="https://ftcscout.org/events/{{ e.start[:4] if e else '' }}/{{ v.code }}" target="_blank" rel="noopener">FTCScout ↗</a>
       {% if e and e.liveStreamURL %}<a href="{{ e.liveStreamURL }}" target="_blank" rel="noopener">📺 Livestream ↗</a>{% endif %}
     </div>
+    {% if v.progress.total %}
+    <div class="progress" title="{{ v.progress.played }} of {{ v.progress.total }} qualification matches played">
+      <i style="width:{{ (100 * v.progress.played / v.progress.total)|round|int }}%"></i></div>
+    <div class="tiny muted">{{ v.progress.played }} of {{ v.progress.total }} qualification matches played</div>
+    {% endif %}
   </div>
   <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
     <form class="btn-row" data-loading="Loading schedule…">
-      <label class="small muted" for="team-in">Scouting for</label>
+      <label class="small muted" for="team-in" title="See the schedule, predictions and strategy from any team's side">Viewing as team</label>
       <input id="team-in" name="team" value="{{ our }}" style="width:90px" inputmode="numeric">
       <button class="ghost small">Show</button>
     </form>
@@ -37,21 +45,33 @@
 
 {% if not v.schedule_out %}
   <div class="banner">⏳ <b>The match schedule isn't posted yet.</b> This page checks again every 2 minutes.
-    Meanwhile, scout the teams below: they're your possible partners and opponents.</div>
-{% elif not v.matches %}
-  <div class="banner">The schedule is out ({{ v.n_matches }} matches), but team {{ our }} isn't in it. Check the team number above.</div>
+    Meanwhile, scout the teams below and plan your <a href="#alliance">alliance selection</a>.</div>
+{% elif not v.matches and our %}
+  <div class="banner">Team {{ our }} isn't in this schedule. Use “Viewing as team” above, or browse <a href="#all">all matches</a>.</div>
 {% endif %}
 
-{% if v.next %}{% set m = v.next %}
+{% if v.highs %}{% set h = v.highs %}
+<div class="cards highs">
+  <div class="card hl"><div class="k">🏆 High score</div><div class="v">{{ h.high_score.points }}</div>
+    <div class="s">{{ h.high_score.match }} · {{ h.high_score.alliance }} {% for n in h.high_score.teams %}{{ tlink(n) }}{% if not loop.last %} + {% endif %}{% endfor %}</div></div>
+  <div class="card"><div class="k">⚡ Best auto</div><div class="v">{{ h.high_auto.points }}</div>
+    <div class="s">{{ h.high_auto.match }} · {% for n in h.high_auto.teams %}{{ tlink(n) }}{% if not loop.last %} + {% endif %}{% endfor %}</div></div>
+  <div class="card"><div class="k">💥 Biggest win</div><div class="v">+{{ h.biggest_win.points }}</div><div class="s">{{ h.biggest_win.match }} · {{ h.biggest_win.score }}</div></div>
+  <div class="card"><div class="k">😬 Closest</div><div class="v">{{ h.closest.points }} pt</div><div class="s">{{ h.closest.match }} · {{ h.closest.score }}</div></div>
+  <div class="card"><div class="k">Avg winning score</div><div class="v">{{ h.avg_winning }}</div><div class="s">{{ h.upsets }} upset{{ '' if h.upsets == 1 else 's' }} so far</div></div>
+</div>
+{% endif %}
+
+{% if v.next %}{% set m = v.next %}{% set mk = v.matches_all|selectattr('description', 'equalto', m.description)|first %}
 <div class="next-hero">
   <div>
-    <div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.6px">Next match</div>
+    <div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.6px">Next match for {{ our }}</div>
     <div style="font-size:22px;font-weight:800">{{ m.description }}</div>
     <span class="chip {{ m.alliance|lower }}">{{ m.alliance }} alliance</span>
     {% if m.time %}<div class="countdown" data-start="{{ m.time }}">--:--</div>
     <div class="small muted">scheduled {{ m.time[11:16] }}{% if m.field %} · field {{ m.field }}{% endif %}</div>{% endif %}
   </div>
-  <div>
+  <div style="min-width:0">
     <div class="small muted">WITH</div>
     <div>{% for p in m.partners %}{{ team_link(p) }}{% else %}–{% endfor %}</div>
     <div class="small muted" style="margin-top:6px">AGAINST</div>
@@ -63,29 +83,40 @@
     <div style="font-size:24px;font-weight:800;margin-top:6px">{{ m.pred_us }}–{{ m.pred_them }}</div>
     <div class="small muted">predicted · {{ m.p_win }}% win</div>
     <div class="winbar"><i style="width:{{ m.p_win }}%"></i></div>
+    {% if mk %}<div class="btn-row" style="justify-content:center;margin-top:10px">
+      <button type="button" class="small" onclick="SS.scoutMatch('{{ code }}', '{{ mk.key }}', {team: {{ our }}, debrief: true})">🗒 Plan / notes</button></div>{% endif %}
   </div>
 </div>
 {% endif %}
 
+<nav class="tabs" id="ev-tabs" role="tablist">
+  <a href="#ours" data-tab="ours">⭐ Our matches{% if v.matches %} <span class="count">{{ v.matches|length }}</span>{% endif %}</a>
+  <a href="#all" data-tab="all">🗓 All matches <span class="count">{{ v.matches_all|length }}</span></a>
+  <a href="#rankings" data-tab="rankings">🏅 Rankings</a>
+  <a href="#alliance" data-tab="alliance">🤝 Alliance selection</a>
+  <a href="#teams" data-tab="teams">👥 Teams <span class="count">{{ v.teams|length }}</span></a>
+</nav>
+
+{# ====================================================== OUR MATCHES #}
+<section class="tabsec" data-sec="ours">
 {% if v.matches %}
 {% set wins = v.matches|selectattr('played')|selectattr('played.result', 'equalto', 'W')|list|length %}
 {% set played = v.matches|selectattr('played')|list|length %}
-<h2>Our matches <span class="count">{{ v.matches|length }}</span>
-  {% if played %}<span class="small muted" style="font-weight:500">{{ wins }}-{{ played - wins }} so far</span>{% endif %}</h2>
 <div class="table-tools">
   <div class="btn-row" id="mfilter">
     <button class="small" data-f="upcoming">Upcoming</button>
-    <button class="small ghost" data-f="played">Played</button>
+    <button class="small ghost" data-f="played">Played{% if played %} ({{ wins }}-{{ played - wins }}){% endif %}</button>
     <button class="small ghost" data-f="all">All</button>
   </div>
-  <div class="small muted">Predictions add up each robot's season OPR {{ "" }}<span class="tip" tabindex="0" data-tip="OPR = points a robot adds per match. Teams with no data yet count as {{ v.fallback|round|int }}.">?</span></div>
+  <div class="small muted">Every match has a prediction and strategy. Press <b>📝 Scout</b> to watch and take notes.</div>
 </div>
 <div class="match-cards" id="mcards">
-{% for m in v.matches %}
+{% for m in v.matches %}{% set mk = v.matches_all|selectattr('description', 'equalto', m.description)|first %}
   <div class="mcard {{ m.alliance|lower }} {% if v.next and m.description == v.next.description %}next{% endif %} {% if m.played %}done{% endif %}" data-played="{{ 1 if m.played else 0 }}">
     <div class="mhead">
       <div><b>{{ m.description }}</b> <span class="chip {{ m.alliance|lower }}">{{ m.alliance }}</span>
-        {% if v.next and m.description == v.next.description %}<span class="chip on">NEXT</span>{% endif %}</div>
+        {% if v.next and m.description == v.next.description %}<span class="chip on">NEXT</span>{% endif %}
+        {% if mk %}<span class="chip" data-mnote="{{ mk.key }}" title="Has match notes" {% if mk.key not in mnotes %}hidden{% endif %}>🗒</span>{% endif %}</div>
       <div class="small muted">{{ m.time[11:16] if m.time else '' }}{% if m.field %} · field {{ m.field }}{% endif %}</div>
     </div>
     <div class="mbody">
@@ -105,28 +136,119 @@
       </div>
     </div>
     {% if m.tips %}
-    <details {% if (v.next and m.description == v.next.description) %}open{% endif %}>
+    <details {% if not m.played %}open{% endif %}>
       <summary class="small"><b>💡 Strategy</b> <span class="muted">({{ m.tips|length }} tips)</span></summary>
       <ul class="tips">{% for t in m.tips %}<li>{{ t }}</li>{% endfor %}</ul>
     </details>
     {% endif %}
-    <div class="small"><a href="{{ url_for('compare', teams=([our] + m.partners|map(attribute='number')|list + m.opponents|map(attribute='number')|list)|join(',')) }}">⚖️ Compare all 4 →</a></div>
+    {% if mk and mnotes.get(mk.key) %}<div class="small mnote-preview">🗒 {{ mnotes[mk.key]|truncate(140) }}</div>{% endif %}
+    <div class="btn-row">
+      {% if mk %}<button type="button" class="small" onclick="SS.scoutMatch('{{ code }}', '{{ mk.key }}', {team: {{ our }}})">📝 Scout</button>
+      {% if m.played %}<button type="button" class="small ghost" onclick="SS.watchMatch('{{ code }}', '{{ mk.key }}', '{{ m.description }}')">▶ Watch</button>{% endif %}{% endif %}
+      <a class="small" href="{{ url_for('compare', teams=([our] + m.partners|map(attribute='number')|list + m.opponents|map(attribute='number')|list)|join(',')) }}">⚖️ Compare all 4</a>
+    </div>
   </div>
 {% endfor %}
 </div>
+{% elif v.schedule_out %}
+<div class="empty">{{ our or 'This team' }} has no matches here. See <a href="#all">all matches</a>.</div>
+{% else %}
+<div class="empty">The schedule isn't out yet, so there are no matches to show.</div>
 {% endif %}
+</section>
 
-<h2>Teams at this event <span class="count">{{ v.teams|length }}</span></h2>
+{# ====================================================== ALL MATCHES #}
+<section class="tabsec" data-sec="all" hidden>
+{% if v.matches_all %}
+<div class="table-tools">
+  <div class="btn-row" id="afilter">
+    <button class="small" data-f="all">All</button>
+    <button class="small ghost" data-f="upcoming">Upcoming</button>
+    <button class="small ghost" data-f="played">Played</button>
+    <button class="small ghost" data-f="upsets">Upsets</button>
+  </div>
+  <input type="search" id="afind" placeholder="Find a team number…" inputmode="numeric" aria-label="Find a team">
+</div>
+<div class="table-wrap"><table id="all-table" class="all-matches">
+  <thead><tr><th class="l">Match</th><th>Time</th><th class="l">Red</th><th class="l">Blue</th><th>Score / prediction</th><th class="l">What to watch</th><th data-nosort></th></tr></thead>
+  <tbody>
+  {% for m in v.matches_all %}
+  <tr data-played="{{ 1 if m.played else 0 }}" data-upset="{{ 1 if m.upset else 0 }}" data-teams=" {{ (m.red + m.blue)|join(' ') }} " class="{{ 'mine' if m.ours }}">
+    <td class="l"><b>{{ m.label }}</b>{% if m.ours %} <span class="chip on">us</span>{% endif %}{% if m.upset %} <span class="chip" title="The underdog won">🔥 upset</span>{% endif %}
+      <span class="chip" data-mnote="{{ m.key }}" title="Has match notes" {% if m.key not in mnotes %}hidden{% endif %}>🗒</span></td>
+    <td class="small muted" data-sort="{{ m.time or '' }}">{{ m.time[11:16] if m.time else '' }}{% if m.field %}<br><span class="tiny">F{{ m.field }}</span>{% endif %}</td>
+    <td class="l red-cell {{ 'win' if m.winner == 'Red' }}">{% for n in m.red %}{{ tlink(n) }}{% if not loop.last %} {% endif %}{% endfor %}</td>
+    <td class="l blue-cell {{ 'win' if m.winner == 'Blue' }}">{% for n in m.blue %}{{ tlink(n) }}{% if not loop.last %} {% endif %}{% endfor %}</td>
+    <td data-sort="{{ (m.red_score or 0) + (m.blue_score or 0) if m.played else m.p_red }}">
+      {% if m.played %}<span class="sc red {{ 'w' if m.winner == 'Red' }}">{{ m.red_score }}</span> – <span class="sc blue {{ 'w' if m.winner == 'Blue' }}">{{ m.blue_score }}</span>
+      {% else %}<span class="small muted">{{ m.pred_red }}–{{ m.pred_blue }}</span>
+        <div class="split" title="Red {{ m.p_red }}% · Blue {{ 100 - m.p_red }}%"><i style="width:{{ m.p_red }}%"></i></div>{% endif %}</td>
+    <td class="l small insight">{% if m.ours and m.tips %}💡 {{ m.tips[0] }}{% elif m.insight %}{{ m.insight }}{% endif %}</td>
+    <td><span class="btn-row" style="flex-wrap:nowrap">
+      <button type="button" class="small" onclick="SS.scoutMatch('{{ code }}', '{{ m.key }}', {team: {{ our }}})" title="Watch and scout all 4 robots">📝 Scout</button>
+      {% if m.played %}<button type="button" class="small ghost" onclick="SS.watchMatch('{{ code }}', '{{ m.key }}', '{{ m.description }}')" title="Watch">▶</button>{% endif %}</span></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<div class="empty">No matches scheduled yet.</div>{% endif %}
+</section>
+
+{# ====================================================== RANKINGS #}
+<section class="tabsec" data-sec="rankings" hidden>
+{% if v.rankings %}
+<div class="table-wrap"><table data-sortable>
+  <thead><tr><th>Rank</th><th class="l">Team</th><th title="Ranking points per match">RP</th><th>Record</th><th>Played</th><th title="Season OPR">OPR</th></tr></thead>
+  <tbody>{% for r in v.rankings %}
+  <tr class="{{ 'mine' if r.number == our }}"><td><b>{{ r.rank }}</b>{% if r.rank <= 4 %} <span class="chip" title="Top 4 usually become alliance captains">captain?</span>{% endif %}</td>
+    <td class="l" data-sort="{{ r.number }}">{{ tlink(r.number) }} <span class="small">{{ r.name or '' }}</span></td>
+    <td>{{ r.rp|num(2) if r.rp is not none else '–' }}</td><td>{{ r.wins }}-{{ r.losses }}-{{ r.ties }}</td><td>{{ r.played or '–' }}</td>
+    <td>{{ r.opr|num if r.opr is not none else '–' }}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty">Rankings appear once qualification matches start.</div>{% endif %}
+</section>
+
+{# ====================================================== ALLIANCE SELECTION #}
+<section class="tabsec" data-sec="alliance" hidden>
+  <div class="alliance-grid">
+    <div class="panel">
+      <h3 style="margin-top:0">📋 Our pick list</h3>
+      <p class="small muted">Tap <b>＋</b> on a team to add it. Drag order with ↑ ↓. Mark teams as they get picked during selection. The whole team sees this list.</p>
+      <ol id="picklist" class="picklist"></ol>
+      <div class="small muted" id="pick-saved"></div>
+    </div>
+    <div>
+      <div class="table-tools" style="margin-top:0"><div class="small muted">Suggested partners for <b>{{ our }}</b>: OPR plus reliability, auto strength next to ours, penalties and breakdowns.</div></div>
+      <div class="table-wrap"><table id="sugg" data-sortable>
+        <thead><tr><th class="l">Team</th><th>Fit</th><th>Rank</th><th>OPR</th><th class="l">Why</th><th data-nosort></th></tr></thead>
+        <tbody>{% for p in v.picks %}
+        <tr data-team="{{ p.number }}"><td class="l" data-sort="{{ p.number }}">{{ tlink(p.number) }} <span class="small">{{ p.name or '' }}</span></td>
+          <td data-sort="{{ p.score }}"><span class="tier t{{ loop.index0 // 4 if loop.index0 < 12 else 3 }}">{{ p.tier }}</span></td>
+          <td>{{ p.rank or '–' }}</td><td>{{ p.opr|num if p.opr is not none else '–' }}</td>
+          <td class="l small" style="white-space:normal">{{ p.reasons|join(' · ') }}{% for f in p.flags %} <span class="chip warnchip">⚠ {{ f }}</span>{% endfor %}</td>
+          <td><button type="button" class="ghost small add-pick" data-n="{{ p.number }}" data-name="{{ p.name or '' }}" title="Add to pick list">＋</button></td></tr>
+        {% endfor %}</tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+{# ====================================================== TEAMS #}
+<section class="tabsec" data-sec="teams" hidden>
 <div class="table-tools">
   <input type="search" data-filter="teams-table" placeholder="Filter teams…" aria-label="Filter teams">
-  <div class="small muted">Click a column header to sort · <span class="chip blue">with us</span> <span class="chip red">against us</span></div>
+  <div class="small muted">Click a column to sort · <span class="chip blue">with us</span> <span class="chip red">against us</span></div>
 </div>
+{% set ally = [] %}{% set foe = [] %}
+{% for m in v.matches %}{% for p in m.partners %}{% set _ = ally.append(p.number) %}{% endfor %}{% for p in m.opponents %}{% set _ = foe.append(p.number) %}{% endfor %}{% endfor %}
 <div class="table-wrap"><table id="teams-table" data-sortable>
-  <tr><th title="Current rank at this event">Rank</th><th class="l">Team</th><th title="Season OPR: points this robot adds per match">OPR</th><th>Auto</th><th>Teleop</th><th>Record</th>
+  <thead><tr><th>Rank</th><th class="l">Team</th><th>OPR</th><th>Auto</th><th>Teleop</th><th>Record</th>
       <th title="This robot leaves its start zone in auto">Leave</th><th title="This robot parks at the end">Park</th><th title="Alliance hive tips per match">Tips</th>
-      <th title="Penalty points given per match">Pen.</th><th class="l">Us</th><th class="l">Scouted</th></tr>
+      <th title="Penalty points given per match">Pen.</th><th class="l">Us</th><th class="l">Scouted</th></tr></thead>
+  <tbody>
   {% for p in v.teams %}
-  <tr {% if p.number == our %}style="background:var(--brand-soft)"{% endif %}>
+  <tr class="{{ 'mine' if p.number == our }}">
     <td>{{ p.live.rank if p.live and p.live.rank else '' }}</td>
     <td class="l" data-sort="{{ p.number }}">{{ team_link(p, False) }}</td>
     <td data-sort="{{ p.opr if p.opr is not none else '' }}"><b>{{ p.opr|num if p.opr is not none else '–' }}</b>{% if p.world_rank %} <span class="tiny muted">#{{ p.world_rank }}</span>{% endif %}</td>
@@ -136,12 +258,29 @@
     <td class="l small">{% if p.scouted_n %}📝 {{ p.scouted_n }}{% endif %}{% if p.cv_shots is not none %} · 🔬 {{ p.cv_shots }}{% endif %}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table></div>
+</section>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// match card filter
+const CODE = {{ v.code|tojson }}, OUR = {{ our|tojson }};
+
+// ---- tabs (remembered in the address, e.g. #alliance)
+(() => {
+  const tabs = [...document.querySelectorAll('#ev-tabs [data-tab]')], secs = [...document.querySelectorAll('.tabsec')];
+  const has = id => secs.some(s => s.dataset.sec === id);
+  const show = id => {
+    if (!has(id)) id = {{ ('ours' if v.matches else 'all')|tojson }};
+    tabs.forEach(t => t.classList.toggle('on', t.dataset.tab === id));
+    secs.forEach(s => s.hidden = s.dataset.sec !== id);
+  };
+  addEventListener('hashchange', () => show(location.hash.slice(1)));
+  show(location.hash.slice(1));
+})();
+
+// ---- our-match filter
 (() => {
   const btns = [...document.querySelectorAll('#mfilter [data-f]')];
   const apply = f => {
@@ -150,13 +289,64 @@
     SS.store.set('mfilter', f);
   };
   btns.forEach(b => b.onclick = () => apply(b.dataset.f));
-  if (btns.length) {
-    const anyUpcoming = document.querySelector('#mcards .mcard[data-played="0"]');
-    apply(SS.store.get('mfilter', anyUpcoming ? 'upcoming' : 'all'));
-  }
+  if (btns.length) apply(SS.store.get('mfilter', document.querySelector('#mcards .mcard[data-played="0"]') ? 'upcoming' : 'all'));
 })();
 
-// countdown to next match (schedule times are the event's local time = this laptop's time at the venue)
+// ---- all-match filter + team finder
+(() => {
+  const btns = [...document.querySelectorAll('#afilter [data-f]')], find = document.getElementById('afind');
+  if (!btns.length) return;
+  let mode = 'all';
+  const apply = () => {
+    const q = (find.value || '').trim();
+    btns.forEach(b => b.classList.toggle('ghost', b.dataset.f !== mode));
+    document.querySelectorAll('#all-table tbody tr').forEach(r => {
+      const ok = mode === 'all' || (mode === 'upcoming' && r.dataset.played === '0') || (mode === 'played' && r.dataset.played === '1') || (mode === 'upsets' && r.dataset.upset === '1');
+      r.hidden = !ok || (q && !r.dataset.teams.includes(' ' + q));
+    });
+  };
+  btns.forEach(b => b.onclick = () => { mode = b.dataset.f; apply(); });
+  find.addEventListener('input', apply);
+})();
+
+// ---- pick list (shared with the team through SnackScout)
+(() => {
+  const list = document.getElementById('picklist'); if (!list) return;
+  let state = {{ picklist|tojson }}; state.order = state.order || []; state.status = state.status || {};
+  const names = {}; {% for p in v.teams %}names[{{ p.number }}] = {{ p.name|tojson }};{% endfor %}
+  const STAT = {'': 'available', picked: 'picked by others', declined: 'declined us', dnp: "don't pick"};
+  function render() {
+    list.innerHTML = state.order.length ? state.order.map((n, i) => {
+      const s = state.status[n] || '';
+      return `<li class="pick ${s}" data-n="${n}"><span class="pnum">${i + 1}</span>
+        <a href="/team/${n}"><b>${n}</b></a> <span class="small">${SS.esc(names[n] || '')}</span>
+        <span class="grow"></span>
+        <select data-st="${n}" aria-label="Status of ${n}">${Object.entries(STAT).map(([k, l]) => `<option value="${k}" ${k === s ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <button class="ghost small" data-mv="-1" title="Move up">↑</button><button class="ghost small" data-mv="1" title="Move down">↓</button>
+        <button class="ghost small" data-rm title="Remove">✕</button></li>`;
+    }).join('') : '<li class="muted small" style="list-style:none">Empty. Add teams from the suggestions with ＋.</li>';
+    document.querySelectorAll('.add-pick').forEach(b => { const on = state.order.includes(+b.dataset.n); b.textContent = on ? '✓' : '＋'; b.disabled = on; });
+  }
+  let t;
+  function save() {
+    render(); clearTimeout(t);
+    t = setTimeout(async () => {
+      const r = await fetch(`/api/event/${CODE}/picklist`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(state)});
+      document.getElementById('pick-saved').textContent = r.ok ? 'Saved · syncs to the team' : 'Couldn\'t save';
+    }, 400);
+  }
+  list.addEventListener('click', e => {
+    const li = e.target.closest('li[data-n]'); if (!li) return; const n = +li.dataset.n, i = state.order.indexOf(n);
+    if (e.target.closest('[data-rm]')) { state.order.splice(i, 1); save(); }
+    const mv = e.target.closest('[data-mv]');
+    if (mv) { const j = i + +mv.dataset.mv; if (j >= 0 && j < state.order.length) { [state.order[i], state.order[j]] = [state.order[j], state.order[i]]; save(); } }
+  });
+  list.addEventListener('change', e => { const s = e.target.closest('[data-st]'); if (s) { state.status[s.dataset.st] = s.value; save(); } });
+  document.querySelectorAll('.add-pick').forEach(b => b.onclick = () => { const n = +b.dataset.n; if (!state.order.includes(n)) { state.order.push(n); save(); toast(`Added ${n} to the pick list`); } });
+  render();
+})();
+
+// ---- countdown to next match (schedule times are local event time = this laptop's time at the venue)
 (() => {
   const el = document.querySelector('.countdown'); if (!el) return;
   const t = new Date(el.dataset.start);
@@ -169,7 +359,7 @@
   tick(); setInterval(tick, 1000);
 })();
 
-// auto-refresh that keeps your place on the page
+// ---- auto-refresh that keeps your place (paused while a window is open or you're typing)
 (() => {
   const key = 'ss.scroll.' + location.pathname;
   try { const y = sessionStorage.getItem(key); if (y) { scrollTo(0, +y); sessionStorage.removeItem(key); } } catch (e) {}
@@ -179,7 +369,7 @@
   box.checked = SS.store.get('autoref', true);
   box.onchange = () => SS.store.set('autoref', box.checked);
   setInterval(() => {
-    if (!box.checked || document.querySelector('input:focus, textarea:focus') || document.hidden) return;
+    if (!box.checked || document.getElementById('ss-modal') || document.querySelector('input:focus, textarea:focus, select:focus') || document.hidden) return;
     try { sessionStorage.setItem(key, scrollY); } catch (e) {}
     location.reload();
   }, {{ 120000 if not v.schedule_out else ((prefs.autorefresh or 90) * 1000) }});

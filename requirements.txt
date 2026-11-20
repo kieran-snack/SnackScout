@@ -7,3 +7,4 @@ numpy
 waitress
 pywebview
 qrcode
+slack_bolt

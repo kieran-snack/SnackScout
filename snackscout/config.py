@@ -28,6 +28,13 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 
+# Slack bot (per laptop: only the laptop with these tokens connects and posts).
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")      # xoxb-...
+SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN", "")      # xapp-... (Socket Mode)
+SLACK_CHANNEL = os.getenv("SLACK_CHANNEL", "")          # where automatic posts go, e.g. #scouting
+SLACK_DISABLED = os.getenv("SLACK_DISABLED", "") == "1"  # tests / extra copies
+
+
 def env_set(key, value):
     """Add or replace one line in .env."""
     p = ROOT / ".env"

@@ -1,0 +1,33 @@
+{
+  "display_information": {
+    "name": "SnackScout",
+    "description": "Team Snack Time's FTC scouting: team stats, our next match, strategy and scouting notes.",
+    "long_description": "SnackScout is Team Snack Time's (FTC 34672) scouting assistant for the FIRST Tech Challenge BIOBUZZ season.\n\nType /scout in any channel to get answers fast:\n• /scout 16750 – a team's stats, OPR and world rank, strengths and weaknesses, plus our own scouting and pit notes\n• /scout next – our next match: who we're with and against, the predicted score, and strategy tips\n• /scout event – today's schedule and results for our team\n• /scout compare 34672 16750 – compare teams side by side\n• /scout help – all commands\n\nSnackScout can also post to the team channel on its own: a reminder about 15 minutes before each of our matches, the result after each match, and a heads-up when teammates save new scouting notes.\n\nData comes from FTCScout, the official FIRST Tech Challenge Events API, and our team's own scouting. SnackScout only posts messages and can see the list of public channels. It can't read anyone's messages.",
+    "background_color": "#d4601a"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "SnackScout",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/scout",
+        "description": "Scout a team, see our next match, compare teams",
+        "usage_hint": "16750 | next | event | compare 34672 16750 | help",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["commands", "chat:write", "chat:write.public", "channels:read"]
+    }
+  },
+  "settings": {
+    "interactivity": { "is_enabled": false },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}

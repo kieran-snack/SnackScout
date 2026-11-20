@@ -68,7 +68,7 @@ def main():
     launcher = core.Launcher()
     api = Api(launcher)
     window = webview.create_window(
-        "SnackScout", url=str(HERE / "index.html"), js_api=api,
+        "SnackScout Launcher", url=str(HERE / "index.html"), js_api=api,
         width=480, height=860, min_size=(420, 640), background_color="#17120d")
 
     def on_closing():

@@ -19,6 +19,7 @@
   <a href="?tab=scouting" class="{{ 'on' if tab == 'scouting' }}">📝 Scouting</a>
   <a href="?tab=account" class="{{ 'on' if tab == 'account' }}">👤 Account</a>
   {% if current_user.role == 'admin' %}<a href="?tab=team" class="{{ 'on' if tab == 'team' }}">👥 Team</a>{% endif %}
+  {% if current_user.role == 'admin' %}<a href="?tab=slack" class="{{ 'on' if tab == 'slack' }}">💬 Slack</a>{% endif %}
   <a href="?tab=cloud" class="{{ 'on' if tab == 'cloud' }}">☁️ Team cloud</a>
 </nav>
 
@@ -160,6 +161,61 @@
     </table></div>
   </div>
 </div>
+{% elif tab == 'slack' and current_user.role == 'admin' %}
+<div class="settings-grid reveal">
+  <div class="panel">
+    <h3>Status</h3>
+    <div class="cloud-state {{ 'good' if slack.connected else 'bad' if slack.error else '' }}">
+      <span class="cloud-icon">💬</span>
+      <div><b>{% if slack.connected %}Connected to {{ slack.team }}{% elif slack.configured %}Not connected{% else %}Not set up{% endif %}</b>
+        <div class="small muted">{% if slack.connected %}as @{{ slack.bot }} · posts to {{ slack.channel or '(no channel)' }}{% elif slack.error %}{{ slack.error }}{% else %}Teammates can't use /scout yet.{% endif %}</div></div>
+    </div>
+    {% if slack.connected %}
+    <div class="btn-row" style="margin-top:12px">
+      <button type="button" class="ghost" id="slack-test">👋 Send test message</button>
+      <form method="post" action="{{ url_for('settings_slack_disconnect') }}" onsubmit="return confirm('Disconnect Slack from this laptop?')"><button class="ghost danger">Disconnect</button></form>
+    </div>
+    <p class="small muted" style="margin-bottom:0">Slack only works while SnackScout runs on <b>this</b> laptop.</p>
+    {% endif %}
+  </div>
+
+  {% if slack.configured %}
+  <form class="panel" method="post" action="{{ url_for('settings_slack_options') }}">
+    <h3>Automatic posts</h3>
+    <label class="row-set" style="cursor:pointer"><div><b>⏰ Match reminders</b><div class="small muted">About 15 minutes before each of our matches: partners, opponents, prediction, tips.</div></div>
+      <input type="checkbox" name="remind" {% if slack.toggles.remind %}checked{% endif %}></label>
+    <label class="row-set" style="cursor:pointer"><div><b>🏁 Match results</b><div class="small muted">Score and win/loss after each of our matches, compared with the prediction.</div></div>
+      <input type="checkbox" name="results" {% if slack.toggles.results %}checked{% endif %}></label>
+    <label class="row-set" style="cursor:pointer"><div><b>📝 New scouting notes</b><div class="small muted">When teammates save scouting or robot notes (from any laptop).</div></div>
+      <input type="checkbox" name="notes" {% if slack.toggles.notes %}checked{% endif %}></label>
+    <label class="row-set"><div><b>Channel</b><div class="small muted">A public channel, e.g. #scouting</div></div>
+      <input name="channel" value="{{ slack.channel }}" style="width:160px"></label>
+    <div class="btn-row" style="margin-top:8px"><button>Save</button></div>
+  </form>
+  {% endif %}
+
+  <div class="panel" style="grid-column: 1 / -1">
+    <h3>{{ 'Change Slack connection' if slack.configured else 'Connect Slack (about 5 minutes)' }}</h3>
+    <ol class="small steps-list">
+      <li>Open <a href="https://api.slack.com/apps?new_app=1" target="_blank" rel="noopener">api.slack.com/apps</a> → <b>Create New App</b> → <b>From a manifest</b>, and pick your team's workspace.</li>
+      <li>Choose <b>JSON</b>, delete what's there, and paste SnackScout's manifest. <button type="button" class="ghost small" id="copy-manifest">Copy the manifest</button>
+        Click <b>Next</b>, then <b>Create</b>.</li>
+      <li>Click <b>Install to Workspace</b> → <b>Allow</b>. Then open <b>OAuth &amp; Permissions</b> and copy the <b>Bot User OAuth Token</b> (starts with <code>xoxb-</code>).</li>
+      <li>Open <b>Basic Information</b> → <b>App-Level Tokens</b> → <b>Generate Token and Scopes</b>. Name it <code>socket</code>, add the scope
+        <code>connections:write</code>, then <b>Generate</b>, and copy the token (starts with <code>xapp-</code>).</li>
+      <li>Paste both tokens below, pick the channel for automatic posts, and click <b>Connect</b>.</li>
+    </ol>
+    <form method="post" action="{{ url_for('settings_slack') }}" class="auth-form" data-loading="Connecting to Slack…">
+      <div class="two">
+        <label>Bot token <span class="faint">(xoxb-…)</span><input name="bot_token" type="password" autocomplete="off" required></label>
+        <label>App-level token <span class="faint">(xapp-…)</span><input name="app_token" type="password" autocomplete="off" required></label>
+      </div>
+      <label>Channel for automatic posts<input name="channel" value="{{ slack.channel or '#scouting' }}" placeholder="#scouting"></label>
+      <div class="btn-row"><button>Connect</button></div>
+      <p class="tiny faint" style="margin:0">The tokens are saved in this laptop's <code>.env</code> only. Other laptops don't connect, so posts aren't doubled.</p>
+    </form>
+  </div>
+</div>
 {% elif tab == 'cloud' %}
 {% set cs = cloud_status %}
 <div class="settings-grid reveal">
@@ -248,6 +304,15 @@ if (syncBtn) syncBtn.onclick = async () => {
   const s = await (await fetch('/api/cloud/sync', {method: 'POST'})).json();
   syncBtn.disabled = false; syncBtn.textContent = '🔄 Sync now'; refreshCloud(s);
   toast(s.ok ? 'Synced with the team cloud' : (s.error || 'Sync failed'), s.ok ? 'good' : 'bad');
+};
+const copyManifest = document.getElementById('copy-manifest');
+if (copyManifest) copyManifest.onclick = async () => SS.copy(await (await fetch('/api/slack/manifest')).text(), 'Manifest copied. Paste it into Slack.');
+const slackTest = document.getElementById('slack-test');
+if (slackTest) slackTest.onclick = async () => {
+  slackTest.disabled = true;
+  const r = await (await fetch('/api/slack/test', {method: 'POST'})).json();
+  slackTest.disabled = false;
+  toast(r.ok ? 'Sent! Check your Slack channel.' : r.error, r.ok ? 'good' : 'bad', 5000);
 };
 const copySql = document.getElementById('copy-sql');
 if (copySql) copySql.onclick = async () => SS.copy(await (await fetch('/api/schema.sql')).text(), 'SQL copied. Paste it into Supabase.');

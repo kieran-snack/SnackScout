@@ -54,6 +54,24 @@ def results(code: str, season: int = SEASON, refresh=False):
     return (data or {}).get("matches") or []
 
 
+def rankings(code: str, season: int = SEASON, refresh=False):
+    """Live event rankings (updated by the scoring system during the event)."""
+    data = _get(f"/{season}/rankings/{code}", max_age=60, refresh=refresh)
+    return (data or {}).get("rankings") or []
+
+
+def search_events(text: str, season: int = SEASON):
+    """All events this season (cached a day), filtered by name / city / code."""
+    data = _get(f"/{season}/events", max_age=24 * 3600) or {}
+    q = text.lower().strip()
+    out = []
+    for e in data.get("events") or []:
+        hay = " ".join(str(e.get(k) or "") for k in ("name", "code", "city", "stateprov", "country", "venue")).lower()
+        if all(w in hay for w in q.split()):
+            out.append(e)
+    return out
+
+
 def team_events(number: int, season: int = SEASON, refresh=False):
     """All events the team is registered for, including future ones FTCScout may not show yet."""
     data = _get(f"/{season}/events", {"teamNumber": number}, refresh=refresh)
