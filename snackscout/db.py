@@ -109,6 +109,10 @@ def init():
                 if col not in cols:
                     c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
             c.execute(f"UPDATE {table} SET updated = ? WHERE updated IS NULL", (time.time(),))
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
+        for col in ("google_sub", "google_email"):  # Google sign-in link
+            if col not in cols:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
 
 def _stamp():
@@ -270,18 +274,19 @@ def get_user(username):
 def list_users():
     with conn() as c:
         return [dict(r) for r in c.execute(
-            "SELECT username, display_name, role, created, updated FROM users WHERE deleted=0 ORDER BY role, display_name")]
+            "SELECT username, display_name, role, created, updated, google_email FROM users WHERE deleted=0 ORDER BY role, display_name")]
 
 
 def create_user(username, display_name, password, role="member"):
+    """password=None makes a Google-only account (no password login until they set one)."""
     u = norm_username(username)
     with conn() as c:
         old = c.execute("SELECT deleted FROM users WHERE username=?", (u,)).fetchone()
         if old and not old["deleted"]:
             raise ValueError("That username is taken.")
         _upsert(c, "users", {"username": u, "display_name": display_name.strip() or u,
-                             "pw_hash": generate_password_hash(password), "role": role,
-                             "created": time.time(), "deleted": 0})
+                             "pw_hash": generate_password_hash(password) if password else None, "role": role,
+                             "created": time.time(), "deleted": 0, "google_sub": None, "google_email": None})
     _changed()
     return get_user(u)
 
@@ -299,6 +304,36 @@ def update_user(username, **changes):
         allowed["pw_hash"] = generate_password_hash(changes["password"])
     with conn() as c:
         _update(c, "users", {"username": norm_username(username)}, allowed)
+    _changed()
+
+
+def free_username(email):
+    """A username made from an email address, e.g. alex.r@gmail.com -> alex.r (or alex.r2 if taken)."""
+    import re
+    base = re.sub(r"[^a-z0-9_.-]", "", (email or "").split("@")[0].lower())[:20].strip(".-") or "scout"
+    base = base if len(base) >= 3 else base + "-scout"
+    name, n = base, 2
+    with conn() as c:
+        while c.execute("SELECT 1 FROM users WHERE username=?", (name,)).fetchone():
+            name, n = f"{base}{n}", n + 1
+    return name
+
+
+def user_by_google(sub):
+    with conn() as c:
+        r = c.execute("SELECT * FROM users WHERE google_sub=? AND deleted=0", (sub,)).fetchone()
+    return dict(r) if r else None
+
+
+def link_google(username, sub, email):
+    """Attach a Google account to a SnackScout account (sub=None unlinks)."""
+    with conn() as c:
+        if sub:
+            other = c.execute("SELECT username FROM users WHERE google_sub=? AND deleted=0 AND username<>?",
+                              (sub, norm_username(username))).fetchone()
+            if other:
+                raise ValueError("That Google account is already linked to another teammate.")
+        _update(c, "users", {"username": norm_username(username)}, {"google_sub": sub, "google_email": email})
     _changed()
 
 

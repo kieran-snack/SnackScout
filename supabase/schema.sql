@@ -26,5 +26,8 @@ create trigger records_touch before insert or update on public.records
   for each row execute function public.snackscout_touch();
 
 -- Lock the table: only SnackScout's secret service_role key can read or write it.
+-- (Newer Supabase projects don't grant table access to service_role automatically, so grant it here.)
 alter table public.records enable row level security;
 revoke all on public.records from anon, authenticated;
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.records to service_role;

@@ -19,6 +19,24 @@ Needs Python 3.11+ and ffmpeg on PATH. The other packages (yt-dlp, OpenCV) are i
 - **Admins** (Settings → Team) can make other admins, reset someone's password (gives a temporary one), remove people,
   and change the team code. The team always keeps at least one admin.
 
+### Sign in with Google
+
+Once an admin turns it on (**Settings → Team → Sign in with Google**, about 10 minutes in Google Cloud Console, free;
+the steps are on that page), teammates can tap **Sign in with Google**:
+- **New teammates** tap Continue with Google, then enter just the **team code**. Their name comes from Google and their
+  username from their email (e.g. `alex.r`). There's no password to remember, though they can add one later under
+  Settings → Account. They can still choose a username and password instead.
+- **Existing accounts** link Google under **Settings → Account**.
+- **After that**, one tap logs them in, on the team laptop (`localhost`) or through the online link.
+  It can't work on the same-Wi-Fi link, because Google won't redirect to private network addresses.
+
+Google returns people to two registered addresses: `http://localhost:5000/auth/google/callback`, and the relay page
+`https://kieran-snack.github.io/scout/auth.html`. The relay forwards online-link sign-ins to the current tunnel.
+The Client ID and secret are saved in the team settings and shared to every laptop through the team cloud.
+
+Passkeys aren't supported yet. They're tied to one exact web address, and the free tunnel address changes every time
+you go online. They become possible with a permanent address (your own domain, or the Oracle server).
+
 ## Team cloud (Supabase, free)
 
 Without the cloud, scouting is saved on the laptop that runs SnackScout. With it, every laptop running SnackScout shares
@@ -46,6 +64,25 @@ Open **⚙️ Settings** from the avatar menu, or press `,`. Settings are saved 
 - **Account:** your display name and password.
 
 Shortcuts: `/` search · `t` dark/light · `,` settings · `Ctrl+Enter` saves a scouting form.
+
+## Versions and updates
+
+SnackScout has one version number, kept in the `VERSION` file. It shows in the app footer, under avatar menu → What's
+new, and in the launcher.
+- **Small updates** (fixes, polish): 1.5 → 1.5.1 → 1.5.2
+- **Bigger releases** (new features): 1.5 → 1.6 → 1.7
+
+To release, run:
+```
+.venv\Scripts\python release.py patch "Fixed the event countdown"
+.venv\Scripts\python release.py minor "Passkeys" "Faster team pages"
+```
+Each quoted note becomes a line in `CHANGELOG.md`. Then commit and tag (`git tag v1.5.1`).
+
+After new files arrive (for example after `git pull`), the launcher shows **Update ready** with a **Restart now** button.
+**↻ Restart** reloads SnackScout in about 10 seconds. The online link stays up, with a moment of "502" while it restarts.
+Restart also takes over a copy of SnackScout started outside the launcher, such as `SnackScout.bat`.
+Changes to the launcher itself need the launcher window closed and reopened.
 
 ## The SnackScout launcher (recommended)
 

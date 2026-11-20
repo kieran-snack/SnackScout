@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}What's new · SnackScout{% endblock %}
+{% block body %}
+<div class="ev-head">
+  <div><h1>✨ What's new</h1>
+    <p class="muted" style="margin:6px 0 0">You're running <b>SnackScout {{ display(running) }}</b>.</p></div>
+  <span class="ver-badge">v{{ display(running) }}</span>
+</div>
+{% if installed != running %}
+<div class="banner reveal">⬆️ Version <b>{{ display(installed) }}</b> is installed on this laptop, but SnackScout is still running
+  {{ display(running) }}. Click <b>Restart</b> in the SnackScout launcher to switch to it.</div>
+{% endif %}
+<p class="small muted">Small updates add a third number (1.5 → 1.5.1). Bigger releases bump the second (1.5 → 1.6).</p>
+<div class="releases">
+  {% for r in releases %}
+  <div class="panel release {{ 'current' if r.version == display(running) }}">
+    <div class="ev-head">
+      <h2 style="margin:0">{{ r.version }} {% if r.version == display(running) %}<span class="chip on">you're here</span>{% endif %}
+        {% if r.version.count('.') == 2 %}<span class="chip">small update</span>{% else %}<span class="chip">release</span>{% endif %}</h2>
+      <span class="small muted">{{ r.date }}</span>
+    </div>
+    <ul>{% for item in r['items'] %}<li>{{ item }}</li>{% endfor %}</ul>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -79,8 +79,14 @@
   <div class="auth-form">
     <label>Display name<input name="display_name" value="{{ current_user.display_name }}" maxlength="40"></label>
     <label>Username<input value="{{ current_user.username }}" disabled></label>
+    {% if current_user.pw_hash %}
     <h3 style="margin-bottom:0">Change password</h3>
     <label>Current password<input type="password" name="current_password" autocomplete="current-password"></label>
+    {% else %}
+    <h3 style="margin-bottom:0">Add a password <span class="small muted" style="font-weight:500">(optional)</span></h3>
+    <p class="small muted" style="margin:0">You sign in with Google. Add a password if you also want to log in with
+      <b>{{ current_user.username }}</b> + password, for example on the same-Wi-Fi link.</p>
+    {% endif %}
     <div class="two">
       <label>New password<input type="password" name="new_password" minlength="6" autocomplete="new-password"></label>
       <label>Again<input type="password" name="new_password2" minlength="6" autocomplete="new-password"></label>
@@ -88,6 +94,20 @@
     <div class="btn-row"><button>Save</button></div>
   </div>
 </form>
+<div class="panel reveal" style="max-width:560px">
+  <h3>Sign in with Google</h3>
+  {% if current_user.google_email %}
+    <div class="btn-row"><span class="tag good">✓ Linked to {{ current_user.google_email }}</span>
+      <form method="post" action="{{ url_for('unlink_google') }}" onsubmit="return confirm('Unlink Google? You will log in with your username and password.')"><button class="ghost small danger">Unlink</button></form></div>
+  {% elif not google_on %}
+    <p class="small muted" style="margin:0">Google sign-in isn't set up for the team yet{% if current_user.role == 'admin' %}. Turn it on under <a href="?tab=team">Team</a>{% else %}. Ask an admin{% endif %}.</p>
+  {% elif not google_here %}
+    <p class="small muted" style="margin:0">Open SnackScout on the team laptop or through the online link to link Google. It can't be done over the same-Wi-Fi link.</p>
+  {% else %}
+    <p class="small muted">Link your Google account so you can sign in with one tap. Your username and password keep working too.</p>
+    <a class="btn google" href="{{ url_for('google_start', mode='link') }}">Link Google account</a>
+  {% endif %}
+</div>
 {% elif tab == 'team' and current_user.role == 'admin' %}
 <div class="settings-grid reveal">
   <div class="panel">
@@ -98,13 +118,35 @@
     <form method="post" action="{{ url_for('settings_team_code') }}" class="btn-row" style="margin-top:12px">
       <input name="code" placeholder="New team code" minlength="6" style="flex:1"><button class="ghost">Change</button></form>
   </div>
-  <div class="panel" style="grid-column: span 2">
+  <div class="panel">
+    <h3>Sign in with Google {% if google_on %}<span class="chip on">on</span>{% else %}<span class="chip">off</span>{% endif %}</h3>
+    {% if google_on %}
+      <p class="small muted">Client ID <code>{{ google_client_id[:18] }}…</code>. Shared with every laptop through the team cloud.</p>
+    {% endif %}
+    <details {% if not google_on %}open{% endif %}>
+      <summary class="small"><b>{{ 'Change settings' if google_on else 'Turn it on (about 10 min, free)' }}</b></summary>
+      <ol class="small steps-list">
+        <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a> and create a project named <code>SnackScout</code>.</li>
+        <li>Go to <b>Google Auth Platform</b> (APIs &amp; Services → OAuth consent screen). Click <b>Get started</b>, set the app name to <i>SnackScout</i>, choose <b>External</b>, and finish.
+          Then open <b>Audience</b> and click <b>Publish app</b>. It only asks for name and email, so Google doesn't need to review it.</li>
+        <li>Open <b>Clients → Create client → Web application</b>. Under <b>Authorized redirect URIs</b>, add both of these:
+          {% for u in google_redirects %}<div class="btn-row" style="margin:4px 0"><code>{{ u }}</code><button type="button" class="ghost small" onclick="SS.copy('{{ u }}', 'Copied')">Copy</button></div>{% endfor %}</li>
+        <li>Click <b>Create</b>, then copy the <b>Client ID</b> and <b>Client secret</b> into the boxes below.</li>
+      </ol>
+      <form method="post" action="{{ url_for('settings_google') }}" class="auth-form">
+        <label>Client ID<input name="client_id" placeholder="….apps.googleusercontent.com" value="{{ google_client_id or '' }}" required></label>
+        <label>Client secret<input name="client_secret" type="password" autocomplete="off" required></label>
+        <div class="btn-row"><button>Save</button>{% if google_on %}<button class="ghost danger" name="action" value="remove" formnovalidate>Turn off</button>{% endif %}</div>
+      </form>
+    </details>
+  </div>
+  <div class="panel" style="grid-column: 1 / -1">
     <h3>Teammates <span class="count">{{ users|length }}</span></h3>
     <div class="table-wrap"><table>
       <tr><th class="l">Name</th><th class="l">Username</th><th>Role</th><th>Joined</th><th></th></tr>
       {% for u in users %}
       <tr><td class="l"><span class="avatar sm">{{ u.display_name[:1]|upper }}</span> {{ u.display_name }}{% if u.username == current_user.username %} <span class="chip">you</span>{% endif %}</td>
-        <td class="l muted">@{{ u.username }}</td>
+        <td class="l muted">@{{ u.username }}{% if u.google_email %} <span class="chip" title="Signs in with Google: {{ u.google_email }}">G</span>{% endif %}</td>
         <td>{% if u.role == 'admin' %}<span class="chip on">admin</span>{% else %}<span class="chip">member</span>{% endif %}</td>
         <td class="small muted">{{ u.created|int|timestamp if u.created else '' }}</td>
         <td><form method="post" action="{{ url_for('settings_team_user') }}" class="btn-row" style="justify-content:flex-end;flex-wrap:nowrap">

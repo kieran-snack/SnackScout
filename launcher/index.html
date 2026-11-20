@@ -76,15 +76,20 @@ pre { background: #0f0b08; border: 1px solid var(--line); border-radius: 10px; p
   background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-weight: 600; pointer-events: none; }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
 .hide { display: none !important; }
+.ver { font-size: 12px; font-weight: 700; color: var(--brand2); background: #f08a2422; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
+.update { display: flex; gap: 10px; align-items: center; background: #1d2a1c; border: 1px solid #2f5a33; color: #d6f5d9; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
 .foot { text-align: center; color: var(--faint); font-size: 12px; margin-top: 8px; }
 </style>
 </head>
 <body>
 <div class="top">
   <div class="logo">🍿</div>
-  <div><h1>SnackScout</h1><div class="sub">Team 34672 · Snack Time · scouting launcher</div></div>
+  <div class="grow"><h1>SnackScout <span class="ver" id="ver"></span></h1><div class="sub">Team 34672 · Snack Time · scouting launcher</div></div>
+  <button class="ghost sm" id="btn-restart-top" title="Restart SnackScout (keeps the online link)">↻ Restart</button>
 </div>
 
+<div id="update" class="update hide"><div class="grow"><b>Update ready</b><div class="small" id="update-text"></div></div>
+  <button class="ghost sm" id="btn-update">↻ Restart now</button></div>
 <div id="err" class="err hide"></div>
 
 <!-- ======================= main status ======================= -->
@@ -168,6 +173,7 @@ pre { background: #0f0b08; border: 1px solid var(--line); border-radius: 10px; p
   <div class="row">
     <div class="grow"><div style="font-weight:600">This laptop</div><div class="small muted">localhost:5000</div></div>
     <button class="ghost sm" id="btn-open-local">Open</button>
+    <button class="ghost sm" id="btn-restart" title="Restart SnackScout. The online link stays up.">↻ Restart</button>
   </div>
   <div class="row" style="margin-top:10px" id="lan-row">
     <div class="grow"><div style="font-weight:600">Same Wi-Fi</div><div class="small muted" id="lan-url"></div></div>
@@ -221,10 +227,11 @@ function render() {
   $('v-connecting').classList.toggle('hide', !connecting);
   $('v-online').classList.toggle('hide', !online);
   const dot = $('dot');
-  if (online) { dot.className = 'dot good'; $('status-text').textContent = 'Online · ' + dur(S.online_for || 0); }
+  if (online && S.server === 'restarting') { dot.className = 'dot busy'; $('status-text').textContent = 'Online · restarting SnackScout…'; }
+  else if (online) { dot.className = 'dot good'; $('status-text').textContent = 'Online · ' + dur(S.online_for || 0); }
   else if (connecting) { dot.className = 'dot busy'; $('status-text').textContent = 'Connecting…'; }
   else if (S.server === 'running') { dot.className = 'dot good'; $('status-text').textContent = 'Running on this laptop only'; }
-  else if (S.server === 'starting') { dot.className = 'dot busy'; $('status-text').textContent = 'Starting…'; }
+  else if (S.server === 'starting' || S.server === 'restarting') { dot.className = 'dot busy'; $('status-text').textContent = S.server === 'restarting' ? 'Restarting…' : 'Starting…'; }
   else { dot.className = 'dot' + (S.tunnel === 'error' || S.server === 'error' ? ' bad' : ''); $('status-text').textContent = 'Offline'; }
 
   if (connecting) {
@@ -245,6 +252,16 @@ function render() {
       : S.permanent_state === 'live' ? '✓ Same link every time. Bookmark it.' : '';
     if (S.qr && $('qr').dataset.for !== main) { $('qr').innerHTML = S.qr.replace(/<\?xml[^>]*>/, ''); $('qr').dataset.for = main; }
   }
+  $('ver').textContent = 'v' + S.version;
+  const busy = S.server === 'restarting' || S.server === 'starting';
+  $('update').classList.toggle('hide', !S.update_ready);
+  $('update-text').textContent = S.update_ready ? `Version ${S.version} is installed, but ${S.running_version} is still running. Restarting takes about 10 seconds; the online link stays up.` : '';
+  for (const id of ['btn-restart', 'btn-restart-top', 'btn-update']) {
+    const b = $(id); b.disabled = busy;
+    b.innerHTML = busy && S.server === 'restarting' ? '<span class="spin"></span> Restarting' : (id === 'btn-update' ? '↻ Restart now' : '↻ Restart');
+  }
+  $('btn-restart').classList.toggle('hide', S.server === 'stopped');
+  $('btn-restart-top').classList.toggle('hide', S.server === 'stopped');
   $('btn-online').disabled = !S.cloudflared;
   $('btn-online').innerHTML = S.cloudflared ? '🌐&nbsp; Go online' : 'Cloudflare tunnel not installed';
   $('btn-local').textContent = S.server === 'running' ? 'Open SnackScout on this laptop' : 'Just open it on this laptop';
@@ -264,7 +281,7 @@ function render() {
 
   $('lan-url').textContent = S.lan_url ? S.lan_url.replace('http://', '') : 'Not connected to a network';
   $('lan-row').classList.toggle('hide', !S.lan_url);
-  $('local-state').textContent = S.server === 'running' ? (S.external ? 'SnackScout is already running in another window.' : 'SnackScout is running.')
+  $('local-state').textContent = S.server === 'restarting' ? 'Restarting SnackScout…' : S.server === 'running' ? (S.external ? `SnackScout ${S.running_version || ''} is running (started outside the launcher). Restart takes it over.` : `SnackScout ${S.running_version || ''} is running.`)
     : S.server === 'starting' ? 'Starting… the first start can take 10–20 seconds.' : 'SnackScout is stopped. Opening it starts it.';
 
   document.querySelectorAll('.toggle').forEach(t => t.querySelector('.switch').classList.toggle('on', !!S.settings[t.dataset.key]));
@@ -284,6 +301,8 @@ function wire() {
   $('btn-share').onclick = () => { call('copy', S.share_text); toast('Invite copied: paste it in your team chat'); };
   $('btn-open').onclick = () => call('open', S.short_url || S.url);
   $('btn-copy-lan').onclick = () => { call('copy', S.lan_url); toast('Wi-Fi link copied'); };
+  const restart = () => { call('restart'); toast('Restarting SnackScout… the online link stays up'); };
+  $('btn-restart').onclick = restart; $('btn-restart-top').onclick = restart; $('btn-update').onclick = restart;
   $('btn-eye').onclick = () => { showPw = !showPw; render(); };
   $('btn-copy-pw').onclick = () => { call('copy', S.password); toast('Team code copied'); };
   const openPage = async path => { await call('start_local'); for (let i = 0; i < 90 && S.server !== 'running'; i++) { await new Promise(r => setTimeout(r, 1000)); await refresh(); } call('open', S.local_url + path); };

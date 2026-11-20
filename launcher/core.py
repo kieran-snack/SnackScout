@@ -17,10 +17,12 @@ from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from snackscout import version  # noqa: E402  (VERSION file + changelog helpers)
 ENV = ROOT / ".env"
 SETTINGS = ROOT / "launcher_settings.json"
 PY = ROOT / ".venv" / "Scripts" / "python.exe"
-PORT = 5000
+PORT = int(os.getenv("PORT", "5000"))  # tests use another port
 LOCAL_URL = f"http://localhost:{PORT}"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 TUNNEL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
@@ -105,9 +107,13 @@ class Proc:
 
     def stop(self):
         if self.alive():
-            self.p.terminate()
+            if os.name == "nt":  # .venv's python.exe is a stub with the real Python as a child: stop the whole tree
+                subprocess.run(["taskkill", "/PID", str(self.p.pid), "/T", "/F"], capture_output=True,
+                               creationflags=NO_WINDOW)
+            else:
+                self.p.terminate()
             try:
-                self.p.wait(4)
+                self.p.wait(5)
             except subprocess.TimeoutExpired:
                 self.p.kill()
         self.p = None
@@ -129,6 +135,7 @@ class Launcher:
         self.perm_error = None
         self.perm_published = None        # last url we published (None = offline)
         self.public = {}                  # /api/public/status from the running app
+        self.restarting = False
         self.lock = threading.Lock()
         threading.Thread(target=self._awake_loop, daemon=True).start()
         threading.Thread(target=self._watch_loop, daemon=True).start()
@@ -310,6 +317,36 @@ class Launcher:
         if was_published:
             self.publish(None)  # visitors now see "SnackScout is offline" instead of an error
 
+    def restart_server(self):
+        """Restart SnackScout, e.g. to load an update. The tunnel keeps running, so the online link comes back."""
+        if self.restarting:
+            return
+        self.restarting, self.error = True, None
+        try:
+            self.server_state = "restarting"
+            if self.server:
+                self.server.stop()
+                self.server = None
+                for _ in range(32):  # give it a moment to let go of the port
+                    if not port_in_use():
+                        break
+                    time.sleep(0.25)
+            if port_in_use() and not stop_other_snackscout():
+                self.server_state = "error"
+                self.error = "Something else is using port 5000 and it isn't SnackScout, so it wasn't touched."
+                return
+            for _ in range(60):
+                if not port_in_use():
+                    break
+                time.sleep(0.25)
+            else:
+                self.server_state, self.error = "error", "SnackScout didn't stop. Close its window, then click Restart."
+                return
+            self.external_server, self.public, self.server_state = False, {}, "stopped"
+            self.start_server()
+        finally:
+            self.restarting = False
+
     def stop_all(self):
         self.go_offline()
         if self.server:
@@ -347,6 +384,8 @@ class Launcher:
         ip = lan_ip()
         pw = self.team_code()
         share = self.short_url or self.url
+        installed = version.read()
+        running = (self.public or {}).get("version") if self.server_state == "running" else None
         logs = []
         for p in (self.server, self.tunnel):
             if p:
@@ -362,7 +401,42 @@ class Launcher:
             logs=logs[-80:],
             permanent_url=PERMANENT_URL, permanent_state=self.perm_state,
             permanent_error=self.perm_error if self.perm_state == "error" else None, gh=bool(find_gh()),
+            version=version.display(installed), running_version=version.display(running) if running else None,
+            update_ready=bool(running and running != installed),
         )
+
+
+def stop_other_snackscout():
+    """Stop a SnackScout started outside the launcher (e.g. SnackScout.bat) that's holding port 5000.
+    Only processes running this folder's app.py are touched. Returns True if one was stopped."""
+    if os.name != "nt":
+        return False
+    ps = (f"Get-NetTCPConnection -LocalPort {PORT} -State Listen -ErrorAction SilentlyContinue | "
+          "Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { "
+          "$w = Get-CimInstance Win32_Process -Filter \"ProcessId=$_\"; "
+          "$p = Get-CimInstance Win32_Process -Filter \"ProcessId=$($w.ParentProcessId)\"; "
+          "[pscustomobject]@{pid=$_; cmd=$w.CommandLine; ppid=$w.ParentProcessId; pcmd=$p.CommandLine} } | ConvertTo-Json -Compress")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                             timeout=20, creationflags=NO_WINDOW).stdout.strip()
+        procs = json.loads(out) if out else []
+    except (subprocess.SubprocessError, ValueError, OSError):
+        return False
+    procs = [procs] if isinstance(procs, dict) else procs
+
+    def ours(cmd):
+        c = (cmd or "").lower()
+        return "app.py" in c and "python" in c and (str(ROOT).lower() in c or ".venv" in c)
+
+    stopped = False
+    for p in procs:
+        if not ours(p.get("cmd")):
+            continue
+        # .venv\Scripts\python.exe is a small stub that starts the real Python as a child: stop the whole tree
+        target = p["ppid"] if ours(p.get("pcmd")) else p["pid"]
+        subprocess.run(["taskkill", "/PID", str(target), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW)
+        stopped = True
+    return stopped
 
 
 def make_qr(text):

@@ -34,6 +34,10 @@ class Api:
         self._l.stop_all()
         return True
 
+    def restart(self):
+        threading.Thread(target=self._l.restart_server, daemon=True).start()
+        return True
+
     def set_setting(self, key, value):
         return self._l.set_setting(key, value)
 

@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}SnackScout{% endblock %}</title>
   {% if not current_user %}<script>try { const t = localStorage.getItem('ss.theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>{% endif %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=4">
-  <link rel="stylesheet" href="{{ url_for('static', filename='motion.css') }}?v=4">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ app_version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='motion.css') }}?v={{ app_version }}">
   <style id="theme-vars">{{ theme_css|safe }}</style>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍿</text></svg>">
   <meta name="theme-color" content="#ec6f1e">
@@ -38,6 +38,7 @@
       <a href="{{ url_for('settings', tab='look') }}">🎨 Colors &amp; theme</a>
       <button type="button" id="theme-btn">🌓 Toggle dark mode <kbd>t</kbd></button>
       <a href="{{ url_for('settings', tab='cloud') }}">☁️ Team cloud</a>
+      <a href="{{ url_for('whats_new') }}">✨ What's new <span class="chip" style="margin-left:auto">v{{ app_version }}</span></a>
       <a href="{{ url_for('logout') }}">↩ Log out</a>
     </div>
   </div>
@@ -45,13 +46,13 @@
 </div></header>
 <main class="page">{% block body %}{% endblock %}</main>
 <footer class="foot">
-  <span>🍿 SnackScout · Team 34672 Snack Time</span>
+  <span>🍿 SnackScout <a href="{{ url_for('whats_new') }}" title="What's new" class="ver">v{{ app_version }}</a> · Team 34672 Snack Time</span>
   <span>Data: FTCScout &amp; FTC Events API · Video: YouTube</span>
   {% if current_user %}<span><kbd>/</kbd> search · <kbd>t</kbd> theme · <kbd>,</kbd> settings</span>{% endif %}
 </footer>
 <div id="toasts" aria-live="polite"></div>
 <button id="totop" class="ghost" title="Back to top" type="button">↑</button>
-<script src="{{ url_for('static', filename='app.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

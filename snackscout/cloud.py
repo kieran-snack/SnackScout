@@ -21,7 +21,16 @@ INTERVAL = 20  # seconds between background syncs
 _state = {"configured": False, "ok": None, "error": None, "last_sync": None, "pushed": 0, "pulled": 0, "running": False}
 _wake = threading.Event()
 _lock = threading.Lock()
-_cfg = {"url": SUPABASE_URL.rstrip("/"), "key": SUPABASE_KEY}
+def normalize_url(url):
+    """Accept the project URL with or without Supabase's '/rest/v1' API path (both get pasted)."""
+    url = (url or "").strip().rstrip("/")
+    for suffix in ("/rest/v1", "/rest"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)]
+    return url.rstrip("/")
+
+
+_cfg = {"url": normalize_url(SUPABASE_URL), "key": SUPABASE_KEY.strip()}
 
 SCHEMA_SQL = (ROOT / "supabase" / "schema.sql")
 
@@ -42,8 +51,8 @@ def _rid(table, row):
 
 def test(url=None, key=None):
     """Check a URL/key pair and that the records table exists. Returns (ok, message)."""
-    url = (url or _cfg["url"]).rstrip("/")
-    key = key or _cfg["key"]
+    url = normalize_url(url or _cfg["url"])
+    key = (key or _cfg["key"]).strip()
     if not url or not key:
         return False, "Not set up yet."
     try:
@@ -55,6 +64,11 @@ def test(url=None, key=None):
         return True, "Connected."
     if r.status_code in (401, 403):
         return False, "Supabase rejected the key. Use the service_role key (Project Settings → API)."
+    if "42501" in r.text and "service_role" in r.text:
+        return False, ("The key works, but the database hasn't given SnackScout access to the table. "
+                       "Run supabase/schema.sql again in the SQL Editor (it includes the needed GRANT).")
+    if "PGRST125" in r.text:
+        return False, "The URL has an extra path. Use just https://<project>.supabase.co"
     if r.status_code == 404 or "does not exist" in r.text or "PGRST205" in r.text:
         return False, "Connected, but the 'records' table is missing. Run supabase/schema.sql in the SQL Editor."
     return False, f"Supabase error {r.status_code}: {r.text[:160]}"
@@ -63,12 +77,27 @@ def test(url=None, key=None):
 def configure(url, key):
     """Save cloud settings to .env and switch to them right away."""
     from .config import env_set
-    env_set("SUPABASE_URL", url.strip().rstrip("/"))
+    url = normalize_url(url)
+    env_set("SUPABASE_URL", url)
     env_set("SUPABASE_KEY", key.strip())
-    _cfg.update(url=url.strip().rstrip("/"), key=key.strip())
+    _cfg.update(url=url, key=key.strip())
     db.meta_set("cloud_pulled_until", "")  # fresh project: pull everything
     _state["configured"] = True
     wake()
+
+
+def _explain(what, resp):
+    """Turn Supabase errors into something a teammate can act on."""
+    t = resp.text
+    if "PGRST125" in t:
+        return f"{what} failed: the Supabase URL has an extra path. Use just https://<project>.supabase.co"
+    if "42501" in t:
+        return f"{what} failed: no permission on the records table. Run supabase/schema.sql again in the SQL Editor."
+    if "PGRST205" in t or "does not exist" in t:
+        return f"{what} failed: the records table is missing. Run supabase/schema.sql in the SQL Editor."
+    if resp.status_code in (401, 403):
+        return f"{what} failed: Supabase rejected the key. Use the service_role key."
+    return f"{what} failed ({resp.status_code}): {t[:200]}"
 
 
 # ---------------------------------------------------------------- push / pull
@@ -86,7 +115,7 @@ def _push():
         resp = requests.post(f"{_cfg['url']}/rest/v1/{TABLE}?on_conflict=kind,id", data=json.dumps(payload),
                              headers=_headers({"Prefer": "resolution=merge-duplicates,return=minimal"}), timeout=30)
         if resp.status_code >= 300:
-            raise RuntimeError(f"upload failed ({resp.status_code}): {resp.text[:200]}")
+            raise RuntimeError(_explain("upload", resp))
         with db.conn() as c:  # mark uploaded, unless it changed again while we were uploading
             for r in rows:
                 c.execute(f"UPDATE {table} SET synced=1 WHERE "
@@ -127,7 +156,7 @@ def _pull():
                             params={"select": "kind,id,data,updated,synced_at", "synced_at": f"gt.{since}",
                                     "order": "synced_at.asc", "limit": "1000"})
         if resp.status_code >= 300:
-            raise RuntimeError(f"download failed ({resp.status_code}): {resp.text[:200]}")
+            raise RuntimeError(_explain("download", resp))
         rows = resp.json()
         if not rows:
             break

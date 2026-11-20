@@ -12,7 +12,7 @@ from functools import wraps
 from flask import (Flask, Response, abort, g, jsonify, redirect, render_template, request, send_from_directory,
                    session, url_for)
 
-from snackscout import analysis, autosync, clips, cloud, db, ftcscout, report, strategy, themes, video
+from snackscout import analysis, autosync, clips, cloud, db, ftcscout, google_auth, report, strategy, themes, version, video
 from snackscout.config import (ANALYSIS_DIR, CLIPS_DIR, HOST, LOCAL_NO_PASSWORD, OUR_TEAM, PORT, SEASON,
                                TEAM_PASSWORD, secret_key)
 from snackscout.ftcscout import ApiError
@@ -37,7 +37,7 @@ def check(pattern, value):
 
 # ---------------- accounts ----------------
 
-PUBLIC_ENDPOINTS = {"login", "signup", "setup", "static", "public_status"}
+PUBLIC_ENDPOINTS = {"login", "signup", "setup", "static", "public_status", "google_start", "google_callback"}
 
 
 def is_local_user():
@@ -124,7 +124,10 @@ def setup():
         if not error:
             if new_code:
                 db.set_team_config("team_code", new_code)
+            pending = session.get("g_pending")
             user = db.create_user(f["username"], f.get("display_name") or f["username"], f["password"], role="admin")
+            if pending:
+                db.link_google(user["username"], pending["sub"], pending["email"])
             log_in(user)
             return redirect(url_for("settings", welcome=1))
     return render_template("setup.html", error=error, local=local, code=code)
@@ -138,16 +141,28 @@ def signup():
     if request.method == "POST":
         f = request.form
         code = team_code()
+        pending = session.get("g_pending")
         if not code or not hmac.compare_digest(f.get("code", "").strip().encode(), code.encode()):
             time.sleep(1)  # slow down guessing
             error = "That team code isn't right. Ask your team lead for it."
+        elif pending:
+            # Google sign-up: the team code is all that's needed. No password; they log in with Google.
+            if db.user_by_google(pending["sub"]):
+                error = "That Google account already has an account. Use Sign in with Google."
+            else:
+                name = (f.get("display_name") or pending.get("name") or pending["email"]).strip()[:40]
+                user = db.create_user(db.free_username(pending["email"]), name, None)
+                db.link_google(user["username"], pending["sub"], pending["email"])
+                log_in(user)
+                return redirect(url_for("index", welcome=1))
         else:
             error = _validate_new_account(f)
         if not error:
             user = db.create_user(f["username"], f.get("display_name") or f["username"], f["password"])
             log_in(user)
             return redirect(safe_next())
-    return render_template("signup.html", error=error)
+    return render_template("signup.html", error=error, google=session.get("g_pending"),
+                           google_on=google_auth.configured())
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -162,7 +177,81 @@ def login():
             return redirect(safe_next())
         time.sleep(1)  # slow down password guessing
         error = "Wrong username or password."
-    return render_template("login.html", error=error)
+    return render_template("login.html", error=error or request.args.get("msg"),
+                           google_on=google_auth.configured() and bool(google_auth.origin_for(request)))
+
+
+@app.get("/auth/google/start")
+def google_start():
+    mode = request.args.get("mode", "login")
+    if mode not in ("login", "link"):
+        abort(400)
+    if not google_auth.configured():
+        return redirect(url_for("login", msg="Google sign-in isn't set up yet. Ask an admin (Settings → Team)."))
+    if request.host.startswith("127.0.0.1"):  # Google only knows "localhost"
+        return redirect(google_auth.LOCAL_ORIGIN + request.full_path)
+    origin = google_auth.origin_for(request)
+    if not origin:
+        return render_template("error.html", message="Google sign-in works on the team laptop and through the online "
+                               "link, but not on the same-Wi-Fi link. Log in with your username and password here."), 400
+    if mode == "link" and not g.user:
+        return redirect(url_for("login"))
+    session["g_next"] = safe_next() if mode == "login" else url_for("settings", tab="account")
+    return redirect(google_auth.start(app.secret_key, origin, mode, session))
+
+
+@app.get("/auth/google/callback")
+def google_callback():
+    origin = google_auth.origin_for(request)
+    try:
+        if not origin:
+            raise google_auth.GoogleError("Google sign-in can't finish on this address.")
+        who = google_auth.finish(app.secret_key, origin, request.args, session)
+    except google_auth.GoogleError as e:
+        dest = "settings" if g.user else "login"
+        return redirect(url_for(dest, tab="account", msg=str(e), bad=1) if g.user else url_for("login", msg=str(e)))
+    nxt = session.pop("g_next", "/")
+    if who["mode"] == "link":
+        if not g.user:
+            return redirect(url_for("login"))
+        try:
+            db.link_google(g.user["username"], who["sub"], who["email"])
+        except ValueError as e:
+            return redirect(url_for("settings", tab="account", msg=str(e), bad=1))
+        return redirect(url_for("settings", tab="account", msg=f"Linked {who['email']}. You can now sign in with Google."))
+    user = db.user_by_google(who["sub"])
+    if user:
+        log_in(user)
+        return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else "/")
+    # Not linked to anyone yet: sign up (team code + username + password), then it gets linked.
+    session["g_pending"] = {"sub": who["sub"], "email": who["email"], "name": who["name"]}
+    if db.user_count() == 0:
+        return redirect(url_for("setup"))
+    return redirect(url_for("signup"))
+
+
+@app.post("/settings/account/unlink-google")
+def unlink_google():
+    if not g.user.get("pw_hash"):
+        return redirect(url_for("settings", tab="account", bad=1,
+                                msg="Set a password first. Otherwise you'd have no way to log in."))
+    db.link_google(g.user["username"], None, None)
+    return redirect(url_for("settings", tab="account", msg="Google account unlinked. Use your username and password to log in."))
+
+
+@app.post("/settings/google")
+@admin_required
+def settings_google():
+    cid, secret = (request.form.get("client_id") or "").strip(), (request.form.get("client_secret") or "").strip()
+    if request.form.get("action") == "remove":
+        db.set_team_config("google_client_id", "")
+        db.set_team_config("google_client_secret", "")
+        return redirect(url_for("settings", tab="team", msg="Google sign-in turned off."))
+    if not cid.endswith(".apps.googleusercontent.com") or len(secret) < 10:
+        return redirect(url_for("settings", tab="team", msg="That doesn't look like a Google Client ID and secret.", bad=1))
+    db.set_team_config("google_client_id", cid)
+    db.set_team_config("google_client_secret", secret)
+    return redirect(url_for("settings", tab="team", msg="Google sign-in is on for every laptop (shared through the team cloud)."))
 
 
 @app.route("/logout")
@@ -174,7 +263,8 @@ def logout():
 @app.context_processor
 def inject_user():
     prefs = db.get_prefs(g.user["username"]) if getattr(g, "user", None) else {}
-    return dict(current_user=getattr(g, "user", None), prefs=prefs, theme_css=themes.css(prefs))
+    return dict(current_user=getattr(g, "user", None), prefs=prefs, theme_css=themes.css(prefs),
+                app_version=version.display(version.RUNNING))
 
 
 @app.template_filter("num")
@@ -450,11 +540,20 @@ def fix_sync():
 
 # ---------------- settings ----------------
 
+@app.route("/whats-new")
+def whats_new():
+    return render_template("whats_new.html", releases=version.changelog(), running=version.RUNNING,
+                           installed=version.read(), display=version.display)
+
+
 @app.route("/settings")
 def settings():
     return render_template("settings.html", palettes=themes.PALETTES, users=db.list_users(),
                            code=team_code() if g.user["role"] == "admin" else None,
                            cloud_status=cloud.status(), admins=db.admin_count(),
+                           google_on=google_auth.configured(), google_here=bool(google_auth.origin_for(request)),
+                           google_client_id=google_auth.client()[0] if g.user["role"] == "admin" else None,
+                           google_redirects=[google_auth.LOCAL_REDIRECT, google_auth.RELAY_URL],
                            tab=request.args.get("tab", "look"), welcome=request.args.get("welcome"))
 
 
@@ -473,7 +572,8 @@ def settings_account():
     if name and name != g.user["display_name"]:
         changes["display_name"] = name[:40]
     if f.get("new_password"):
-        if not db.check_login(g.user["username"], f.get("current_password")):
+        has_pw = bool(g.user.get("pw_hash"))  # Google-only accounts set their first password without one
+        if has_pw and not db.check_login(g.user["username"], f.get("current_password")):
             time.sleep(1)
             return redirect(url_for("settings", tab="account", msg="Your current password isn't right.", bad=1))
         if len(f["new_password"]) < 6 or f["new_password"] != f.get("new_password2"):
@@ -522,8 +622,8 @@ def settings_team_user():
 @app.post("/settings/cloud")
 @admin_required
 def settings_cloud():
-    url, key = (request.form.get("url") or "").strip(), (request.form.get("key") or "").strip()
-    if not re.fullmatch(r"https://[a-z0-9-]+\.supabase\.co", url.rstrip("/")):
+    url, key = cloud.normalize_url(request.form.get("url")), (request.form.get("key") or "").strip()
+    if not re.fullmatch(r"https://[a-z0-9-]+\.supabase\.co", url):
         return redirect(url_for("settings", tab="cloud", msg="The URL should look like https://abcd1234.supabase.co", bad=1))
     ok, msg = cloud.test(url, key)
     if not ok:
@@ -554,11 +654,11 @@ def cloud_status():
 def public_status():
     """For the launcher on this laptop: no secrets, just whether setup is needed and cloud health."""
     s = cloud.status()
-    return jsonify(setup_needed=db.user_count() == 0, users=db.user_count(),
+    return jsonify(setup_needed=db.user_count() == 0, users=db.user_count(), version=version.RUNNING,
                    cloud=dict(configured=s["configured"], ok=s["ok"], ago=s["ago"], pending=s["pending"]))
 
 
 if __name__ == "__main__":
     from waitress import serve
-    print(f"SnackScout running - open http://localhost:{PORT}" + ("  (team password on)" if TEAM_PASSWORD else ""))
+    print(f"SnackScout {version.display(version.RUNNING)} running - open http://localhost:{PORT}")
     serve(app, host=HOST, port=PORT, threads=12)
